@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+    "fmt"
+    "os"
+)
 
 // BUG: ignored error
 func read() {
