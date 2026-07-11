@@ -12,16 +12,13 @@ from fallback_chain import FallbackChain, ModelConfig
 from state_machine import initial_state, is_terminal, next_state
 from static_check import static_check, Finding, StaticReport
 
-
 _SOURCE_DELIM = "__AI_DUAL_CHECK_SOURCE__"
-
 
 @dataclass
 class AIReport:
     confirmation: list[Finding] = field(default_factory=list)
     rejection: list[Finding] = field(default_factory=list)
     new_findings: list[Finding] = field(default_factory=list)
-
 
 @dataclass
 class FinalReport:
@@ -31,13 +28,11 @@ class FinalReport:
     ai_summary: str
     findings: list[dict]
 
-
 def _load_config(path: str) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 def _default_config_path() -> str:
     return str(Path(__file__).resolve().parents[1] / "references" / "config.example.json")
-
 
 def _resolve_cache_dir(cache_dir: str, config_path: str) -> str:
     p = Path(cache_dir or "data/.cache")
@@ -49,10 +44,8 @@ def _resolve_cache_dir(cache_dir: str, config_path: str) -> str:
     base = Path(__file__).resolve().parents[2] if is_default or not (cfg and cfg.exists()) else cfg.resolve().parent
     return str(base / p)
 
-
 def _model_ver(models: list[dict]) -> str:
     return json.dumps(models, sort_keys=True)[:32]
-
 
 def _build_prompt(static_report: StaticReport, code: str, lang: str, framework: str) -> str:
     findings_text = "\n".join(f"- 行 {f.line} [{f.kind}] {f.message}" for f in static_report.findings)
@@ -69,7 +62,6 @@ def _build_prompt(static_report: StaticReport, code: str, lang: str, framework: 
         '"new_findings": [{"line": 行号, "kind": "类型", "severity": "high/medium/low", "message": "AI 发现静态层漏掉的问题"}]}\n'
     )
 
-
 def _parse_ai(text: str) -> AIReport | None:
     try:
         data = json.loads(text.strip())
@@ -82,7 +74,6 @@ def _parse_ai(text: str) -> AIReport | None:
                     rejection=to_findings(data.get("rejection", [])),
                     new_findings=to_findings(data.get("new_findings", [])))
 
-
 def _risk(ai_report: AIReport | None, static: StaticReport) -> str:
     high = sum(1 for f in static.findings if f.severity == "high")
     if ai_report:
@@ -93,7 +84,6 @@ def _risk(ai_report: AIReport | None, static: StaticReport) -> str:
     if static.findings or (ai_report and (ai_report.confirmation or ai_report.new_findings)):
         return "修复后合并"
     return "可合并"
-
 
 def merge(static_report: StaticReport, ai_report: AIReport | None, ai_text: str) -> FinalReport:
     rows: list[dict] = [{"line": f.line, "layer": "static", "kind": f.kind,
@@ -112,7 +102,6 @@ def merge(static_report: StaticReport, ai_report: AIReport | None, ai_text: str)
         summary += f"; AI 新发现 {len(ai_report.new_findings)} 条"
     return FinalReport(risk=risk, summary=summary, static_summary=static_report.summary,
                        ai_summary=ai_summary, findings=rows)
-
 
 def review(code: str, lang: str, framework: str = "", config_path: str = "", use_cache: bool = True) -> FinalReport:
     config = _load_config(config_path) if config_path and Path(config_path).exists() else _load_config(
@@ -158,20 +147,17 @@ def review(code: str, lang: str, framework: str = "", config_path: str = "", use
         return report
     return merge(static_report, None, "")
 
-
 def _fmt(report: FinalReport) -> str:
     header = ["# 双检代码评审报告", "", f"风险等级: {report.risk}", "", "## 摘要", report.summary,
               "", "## 静态层", report.static_summary, "", "## AI 层", report.ai_summary, "", "## 明细"]
     detail = [f'- 行 {f["line"]} [{f["layer"]}:{f["kind"]}] {f["severity"]} — {f["message"]}' for f in report.findings]
     return "\n".join(header + detail)
 
-
 def _smoke() -> None:
     bad = "def f(a=[]):\n    try:\n        x = 1\n    except:\n        pass\n"
     r = review(bad, "python")
     assert r.risk in ("修复后合并", "阻止合并"), r.risk
     print("app smoke PASS:", r.summary)
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="AI 代码评审双检助手")
@@ -199,7 +185,6 @@ def main() -> None:
         print(json.dumps(report.__dict__, ensure_ascii=False, indent=2))
     else:
         print(_fmt(report))
-
 
 if __name__ == "__main__":
     main()
