@@ -22,12 +22,24 @@ class StaticReport:
 
 
 def _max_nesting(tree_node: ast.AST) -> int:
+    """返回函数体内的最大嵌套深度（≥1；含函数体自身层级）。"""
     def visit(node, d):
         body = getattr(node, "body", None)
         if not isinstance(body, list):
             return d
         return max((visit(child, d + 1) for child in body), default=d)
     return visit(tree_node, 0)
+
+
+def _check_mutable_defaults(node: ast.AST, name: str, defaults: list, findings: list) -> None:
+    """检查函数默认参数是否使用了可变对象（list/dict/set）。"""
+    for arg in defaults:
+        if isinstance(arg, (ast.List, ast.Dict, ast.Set)):
+            findings.append(Finding(node.lineno, "mutable_default", "high",
+                                   f"函数 {name} 使用可变默认参数"))
+        elif isinstance(arg, ast.Call) and getattr(arg.func, "id", "") in ("list", "dict", "set"):
+            findings.append(Finding(node.lineno, "mutable_default", "high",
+                                   f"函数 {name} 使用可变默认参数"))
 
 
 def _python_check(code: str, max_fn: int, max_nest: int) -> List[Finding]:
@@ -53,22 +65,9 @@ def _python_check(code: str, max_fn: int, max_nest: int) -> List[Finding]:
             if branches > 10:
                 findings.append(Finding(node.lineno, "high_complexity", "medium",
                                        f"函数 {node.name} 圈复杂度约 {branches + 1}"))
-            for arg in node.args.defaults:
-                if isinstance(arg, (ast.List, ast.Dict, ast.Set)):
-                    findings.append(Finding(node.lineno, "mutable_default", "high",
-                                           f"函数 {node.name} 使用可变默认参数"))
-                elif isinstance(arg, ast.Call) and getattr(arg.func, "id", "") in ("list", "dict", "set"):
-                    findings.append(Finding(node.lineno, "mutable_default", "high",
-                                           f"函数 {node.name} 使用可变默认参数"))
-            for arg in node.args.kw_defaults:
-                if arg is None:
-                    continue
-                if isinstance(arg, (ast.List, ast.Dict, ast.Set)):
-                    findings.append(Finding(node.lineno, "mutable_default", "high",
-                                           f"函数 {node.name} 使用可变默认参数"))
-                elif isinstance(arg, ast.Call) and getattr(arg.func, "id", "") in ("list", "dict", "set"):
-                    findings.append(Finding(node.lineno, "mutable_default", "high",
-                                           f"函数 {node.name} 使用可变默认参数"))
+            _check_mutable_defaults(node, node.name, node.args.defaults, findings)
+            _check_mutable_defaults(node, node.name,
+                                    [a for a in node.args.kw_defaults if a is not None], findings)
             if _max_nesting(node) > max_nest:
                 findings.append(Finding(node.lineno, "deep_nesting", "medium",
                                        f"函数 {node.name} 嵌套深度超过 {max_nest}"))

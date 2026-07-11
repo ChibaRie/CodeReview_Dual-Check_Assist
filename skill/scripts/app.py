@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -63,14 +64,9 @@ def _build_prompt(static_report: StaticReport, code: str, lang: str, framework: 
     )
 
 def _parse_ai(text: str) -> AIReport | None:
-    raw = text.strip()
-    if raw.startswith("```"):
-        parts = raw.split("\n", 1)
-        raw = parts[1] if len(parts) > 1 else ""
-    if raw.endswith("```"):
-        parts = raw.rsplit("\n", 1)
-        raw = parts[0] if len(parts) > 1 else ""
-    raw = raw.strip()
+    # Strip markdown code fences robustly: ```json ... ``` or ``` ... ```
+    m = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
+    raw = m.group(1).strip() if m else text.strip()
     try:
         data = json.loads(raw)
     except Exception:
