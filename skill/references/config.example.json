@@ -1,0 +1,31 @@
+{
+  "models": [
+    {
+      "name": "deepseek",
+      "endpoint": "https://api.deepseek.com/v1/chat/completions",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "model": "deepseek-chat",
+      "timeout": 30
+    },
+    {
+      "name": "qwen",
+      "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+      "api_key_env": "DASHSCOPE_API_KEY",
+      "model": "qwen-plus",
+      "timeout": 30
+    }
+  ],
+  "breaker": {
+    "threshold": 3,
+    "cooldown": 60
+  },
+  "cache": {
+    "dir": "data/.cache",
+    "ttl_days": 7
+  },
+  "review": {
+    "max_function_lines": 50,
+    "max_nesting": 4,
+    "max_file_lines": 800
+  }
+}
