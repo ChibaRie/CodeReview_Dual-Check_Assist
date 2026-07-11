@@ -3,7 +3,7 @@ def add_item(item, cache=[]):
     cache.append(item)
     return cache
 
-# BUG: bare except
+# BUG: bare except + unclosed file
 def read_file(path):
     try:
         f = open(path)

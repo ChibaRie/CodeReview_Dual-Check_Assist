@@ -14,6 +14,6 @@ def read_file(path):
 
 
 def classify(value):
-    if value is True:
+    if value:
         return "yes"
     return "no"

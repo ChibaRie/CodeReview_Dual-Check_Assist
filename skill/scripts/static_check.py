@@ -80,6 +80,9 @@ def _python_check(code: str, max_fn: int, max_nest: int) -> List[Finding]:
                 if isinstance(op, (ast.Is, ast.IsNot)) and isinstance(
                     node.comparators[i], ast.Constant
                 ):
+                    # `is None` / `is not None` 是 PEP 8 推荐的惯用写法，不过滤
+                    if node.comparators[i].value is None:
+                        continue
                     findings.append(Finding(node.lineno, "is_literal", "medium",
                                            "用 'is' 比较字面量，应改用 '=='"))
     return findings
@@ -134,17 +137,22 @@ def very_long_function(p, q, r, s, t, u, v, w):
     print("static_check smoke PASS:", report.summary)
 
     # --- Inline verification of the two important fixes ---
-    # Fix 1: chained comparisons pair each operator with its right operand
-    # (old code incorrectly tested operators against comparators that weren't
-    # theirs, e.g. flagging the second 'is' because of the earlier None).
+    # Fix 1: chained comparisons pair each operator with its right operand.
+    # `is None` is excluded (PEP 8 singleton idiom); `is b` has no Constant → 0 findings.
     chained = "x = (a is None is b)\n"
     chained_findings = [f for f in _python_check(chained, 50, 4)
                         if f.kind == "is_literal"]
-    assert len(chained_findings) == 1, (
-        f"expected 1 is_literal finding for chained 'is None is b' "
-        f"(only the 'is None' pair should match), got {len(chained_findings)}: "
+    assert len(chained_findings) == 0, (
+        f"expected 0 is_literal findings for chained 'is None is b' "
+        f"(None is a singleton, b is a Name), got {len(chained_findings)}: "
         f"{chained_findings}"
     )
+
+    # `is True` should still be flagged (True is not a PEP 8 singleton exception).
+    is_true = "if value is True:\n    pass\n"
+    true_findings = [f for f in _python_check(is_true, 50, 4)
+                     if f.kind == "is_literal"]
+    assert len(true_findings) == 1, f"expected 1 for is True, got {len(true_findings)}"
 
     # Fix 2: keyword-only defaults should be inspected.
     kw_default = "def f(*, a=[]):\n    pass\n"

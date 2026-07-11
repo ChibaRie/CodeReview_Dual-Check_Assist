@@ -12,9 +12,7 @@
 ## 快速开始
 
 ```bash
-# 1. 复制配置并填入 API key
-cp skill/references/config.example.json skill/references/config.json
-# 编辑 config.json，填入 DEEPSEEK_API_KEY / DASHSCOPE_API_KEY
+# 1. 设置 API 密钥（通过环境变量，禁止写入配置文件）
 export DEEPSEEK_API_KEY=your_key
 # 可选：export DASHSCOPE_API_KEY=your_key
 

@@ -9,6 +9,11 @@ venv/
 data/.cache/
 *.tmp
 
+# 敏感文件（防止 API 密钥泄露）
+config.json
+.env
+*.log
+
 # 系统
 .DS_Store
 Thumbs.db

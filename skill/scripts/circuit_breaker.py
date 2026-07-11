@@ -22,8 +22,11 @@ class CircuitBreaker:
         return True
 
     def record_success(self) -> None:
-        self.failures = 0
-        self.state = "CLOSED"
+        if self.state == "HALF_OPEN":
+            self.failures = 0
+            self.state = "CLOSED"
+        elif self.state == "CLOSED":
+            self.failures = 0
 
     def record_failure(self) -> None:
         self.failures += 1
