@@ -88,12 +88,137 @@ def _python_check(code: str, max_fn: int, max_nest: int) -> List[Finding]:
     return findings
 
 
-def _regex_check(code: str) -> List[Finding]:
+def _java_check(code: str) -> list[Finding]:
+    """Java 静态规则（基于正则模式匹配）。
+
+    覆盖 Exp8 暴露的 P0 缺口：
+      - SQL/HQL 注入（字符串拼接构造查询）
+      - 硬编码密码/密钥
+      - Session/Connection 资源泄漏
+      - System.out.println 调试残留
+      - 原始类型（List 缺泛型参数）
+      - 方法命名反转
+    """
+    findings: list[Finding] = []
+    lines = code.splitlines()
+
+    # ── SQL/HQL 注入：字符串拼接构造查询 ──
+    # 模式:  "SELECT/UPDATE/DELETE/INSERT ..." + var 或  "... = '" + var + "'"
+    sql_concat = re.compile(
+        r'(?:createQuery|executeQuery|executeUpdate|createSQLQuery|session\.createQuery)\s*\(\s*"'
+        r'.*?(?:SELECT|UPDATE|DELETE|INSERT|FROM|WHERE)\b',
+        re.IGNORECASE,
+    )
+    for i, line in enumerate(lines, 1):
+        if sql_concat.search(line):
+            # 检查是否包含字符串拼接（+）
+            if "+" in line:
+                findings.append(Finding(
+                    i, "sql_injection", "high",
+                    "SQL/HQL 注入风险：使用字符串拼接构造查询，应用参数化查询（? 占位符 + setParameter）",
+                ))
+
+    # ── 硬编码密码/密钥 ──
+    secret_patterns = [
+        (r'(?:password|passwd|pwd)\s*=\s*"[^"]+"', "high", "硬编码密码"),
+        (r'(?:apiKey|api_key|secretKey|secret_key|token)\s*=\s*"[^"]+"', "high", "硬编码密钥/令牌"),
+    ]
+    for i, line in enumerate(lines, 1):
+        for pat, sev, desc in secret_patterns:
+            if re.search(pat, line, re.IGNORECASE) and not re.search(r'(?:getenv|environ|System\.getenv|@Value)', line):
+                findings.append(Finding(
+                    i, "hardcoded_secret", sev,
+                    f"{desc}：应将敏感值移至环境变量或配置中心",
+                ))
+
+    # ── Session/Connection 资源泄漏 ──
+    # 检测：方法内调用了 openSession/getConnection 但同一方法体无 .close()
+    session_open = re.compile(r'\.(?:openSession|getCurrentSession|getConnection)\s*\(')
+    session_close = re.compile(r'\.close\s*\(\s*\)')
+    in_method = False
+    brace_depth = 0
+    open_line = 0
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        # 方法签名检测
+        if re.match(r'\s*(?:public|private|protected)\s+(?:\w+\s+)?\w+\s*\(', stripped) and "{" in stripped:
+            in_method = True
+            brace_depth = 1
+            open_line = 0
+        elif in_method:
+            brace_depth += stripped.count("{") - stripped.count("}")
+            if session_open.search(line):
+                open_line = i
+            if session_close.search(line) and open_line:
+                open_line = 0
+            if brace_depth <= 0:
+                if open_line > 0:
+                    findings.append(Finding(
+                        open_line, "resource_leak", "high",
+                        "Session/Connection 资源泄漏：openSession()/getConnection() 所在方法未调用 close()，"
+                        "应用 try-with-resources 或 finally 块确保释放",
+                    ))
+                in_method = False
+                open_line = 0
+
+    # ── System.out.println / printStackTrace 调试残留 ──
+    for i, line in enumerate(lines, 1):
+        if re.search(r'System\.out\.(?:print|println|printf)\s*\(', line):
+            findings.append(Finding(
+                i, "debug_print", "medium",
+                "调试代码残留：System.out.println 应替换为日志框架（SLF4J/Log4j）",
+            ))
+        if re.search(r'\.printStackTrace\s*\(\s*\)', line):
+            findings.append(Finding(
+                i, "debug_print", "medium",
+                "调试代码残留：printStackTrace() 应替换为 logger.error() 记录完整堆栈",
+            ))
+
+    # ── 原始类型（集合缺泛型参数） ──
+    # 检测: List users = new ArrayList()  — 缺泛型
+    #       Map m = new HashMap()         — 缺泛型
+    raw_decl = re.compile(
+        r'\b(?:List|ArrayList|Set|HashSet|Map|HashMap|Collection)\s+\w+\s*=\s*new\s+\w+\s*\(\s*\)',
+    )
+    raw_new = re.compile(
+        r'new\s+(?:ArrayList|HashSet|HashMap|LinkedList|TreeSet)\s*\(\s*\)(?!\s*[;,]|\s*\{)',
+    )
+    for i, line in enumerate(lines, 1):
+        if raw_decl.search(line):
+            findings.append(Finding(
+                i, "raw_type", "medium",
+                "原始类型警告：集合声明缺少泛型参数，应指定类型如 List<String>",
+            ))
+        elif raw_new.search(line) and "<>" not in line:
+            findings.append(Finding(
+                i, "raw_type", "medium",
+                "原始类型警告：new 集合缺少泛型参数，应使用 <> 菱形运算符",
+            ))
+
+    # ── 方法命名不规范（findBydept → findByDept） ──
+    # 检测：方法名中某个"词"全小写且 ≥4 字符且不在开头
+    # 使用 camelCase 分词: [A-Z][a-z]* 或 [a-z]+
+    for i, line in enumerate(lines, 1):
+        m = re.match(r'\s*(?:public|private|protected)\s+(?:\w+\s+)?(\w+)\s*\(', line)
+        if m:
+            name = m.group(1)
+            words = re.findall(r'[A-Z][a-z]*|[a-z]+', name)
+            for w in words[1:]:  # 跳过第一个词（允许全小写）
+                if w[0].islower() and len(w) >= 4:
+                    findings.append(Finding(
+                        i, "naming_convention", "medium",
+                        f"方法命名不规范：'{name}' 中 '{w}' 应首字母大写以符合 camelCase",
+                    ))
+
+    return findings
+
+
+def _regex_check(code: str, *, max_line_length: int = 120) -> List[Finding]:
     findings: List[Finding] = []
     for i, line in enumerate(code.splitlines(), 1):
-        if len(line) > 120:
+        if len(line) > max_line_length:
             findings.append(Finding(i, "long_line", "low",
-                                    f"行 {i} 长度 {len(line)}，建议 ≤120"))
+                                    f"行 {i} 长度 {len(line)}，建议 ≤{max_line_length}"))
         if re.search(r"\bTODO\b|\bFIXME\b", line):
             findings.append(Finding(i, "todo_marker", "low",
                                    "存在 TODO/FIXME 标记"))
@@ -102,13 +227,16 @@ def _regex_check(code: str) -> List[Finding]:
 
 def static_check(code: str, lang: str, *,
                  max_function_lines: int = 50,
-                 max_nesting: int = 4) -> StaticReport:
+                 max_nesting: int = 4,
+                 max_line_length: int = 120) -> StaticReport:
     """对 code 进行静态检查，返回 StaticReport。"""
     if lang == "python":
         findings = _python_check(code, max_function_lines, max_nesting)
+    elif lang == "java":
+        findings = _java_check(code)
     else:
         findings = []
-    findings += _regex_check(code)
+    findings += _regex_check(code, max_line_length=max_line_length)
     summary = f"发现 {len(findings)} 条静态问题" if findings else "未发现明显静态问题"
     return StaticReport(lang=lang, findings=findings, summary=summary)
 

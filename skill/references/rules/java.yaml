@@ -1,0 +1,62 @@
+# Java 静态规则声明 (v0.8)
+# 基于 Exp8 校园管理系统实战评审暴露的 P0 缺口
+
+language: java
+version: "0.8"
+
+rules:
+  - kind: sql_injection
+    severity: high
+    description: "SQL/HQL 注入风险：使用字符串拼接构造查询"
+    pattern: 'createQuery|executeQuery|executeUpdate + 字符串拼接'
+    fix: "使用参数化查询：? 占位符 + setParameter()，或命名参数 :param"
+    rationale: "Exp8 发现 UserDao.java 中 3 处 HQL 字符串拼接，属 CRITICAL 安全漏洞"
+
+  - kind: hardcoded_secret
+    severity: high
+    description: "硬编码密码/密钥/令牌"
+    pattern: 'password|apiKey|secretKey|token = "..."'
+    fix: "将敏感值移至环境变量或配置中心，运行时注入"
+    rationale: "Exp8 发现 User.java 明文存储 ADMIN_PASSWORD"
+
+  - kind: resource_leak
+    severity: high
+    description: "Session/Connection 资源泄漏"
+    pattern: "openSession()/getConnection() 所在方法无 close()"
+    fix: "使用 try-with-resources 或 finally 块确保资源释放"
+    rationale: "Exp8 发现所有 DAO 方法 openSession 后未 close"
+
+  - kind: debug_print
+    severity: medium
+    description: "调试代码残留"
+    pattern: 'System.out.print|.printStackTrace()'
+    fix: "替换为日志框架（SLF4J/Log4j），异常用 logger.error() 记录"
+    rationale: "Exp8 发现 UserOperationController 中残留 println 和 printStackTrace"
+
+  - kind: raw_type
+    severity: medium
+    description: "集合缺少泛型参数"
+    pattern: 'List x = new ArrayList() | Map m = new HashMap()'
+    fix: "指定泛型类型：List<String> 或使用菱形运算符 <>"
+    rationale: "Exp8 发现 DeptDao 中 List 未指定泛型，导致类型不安全"
+
+  - kind: naming_convention
+    severity: medium
+    description: "方法命名不规范（驼峰缺失）"
+    pattern: "camelCase 分词中非首词全小写 ≥4 字符"
+    fix: "改用标准 camelCase，如 findByDept 替代 findBydept"
+    rationale: "Exp8 发现 UserDao 中 findBydept 命名反转"
+
+  - kind: unused_import
+    severity: low
+    description: "未使用的 import 语句"
+    pattern: "import 的类在文件中未被引用"
+    fix: "删除未使用的 import，保持代码整洁"
+    rationale: "Exp8 发现 UserLoginController 中有多余 import"
+
+  - kind: missing_transactional
+    severity: medium
+    description: "写操作缺少 @Transactional 注解"
+    pattern: "insert/update/delete 方法无 @Transactional"
+    fix: "添加 @Transactional 注解确保事务一致性"
+    rationale: "Exp8 发现 DeptDao.insert() 缺少事务注解"

@@ -1,0 +1,18 @@
+# JavaScript/TypeScript 静态检查规则（v0.3 占位）
+# 当前仅正则层支持。JS/TS AST 规则计划通过 ESLint 规则子集实现。
+
+language: javascript
+version: 1
+updated: "2026-07-12"
+status: placeholder
+
+thresholds:
+  max_function_lines: 50
+  max_line_length: 120
+
+# 计划中的 AST 规则（v0.3）:
+# - no_unused_vars: 未使用的变量声明
+# - no_undefined: 使用未定义的变量
+# - eqeqeq: 使用 == 而非 ===
+# - no_var: 使用 var 而非 let/const
+# - promise_no_await: Promise 未 await

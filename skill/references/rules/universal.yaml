@@ -1,0 +1,33 @@
+# 通用正则层检查规则
+# 这些规则适用于所有编程语言，不依赖 AST 解析
+
+language: universal
+version: 1
+updated: "2026-07-12"
+
+# ── 阈值配置 ──
+thresholds:
+  max_line_length: 120
+
+# ── 正则规则 ──
+regex_rules:
+  - id: long_line
+    kind: long_line
+    severity: low
+    description: 单行长度超过 {max_line_length} 字符
+    trigger: len(line) > thresholds.max_line_length
+    rationale: 超长行降低 diff 可读性，增加横向滚动的认知负担
+    suggestion: 拆分表达式、提取变量或换行
+
+  - id: todo_marker
+    kind: todo_marker
+    severity: low
+    description: 存在 TODO/FIXME 标记
+    trigger: "regex: \\bTODO\\b|\\bFIXME\\b"
+    rationale: TODO/FIXME 表明代码存在未完成或临时性的部分，应在合并前评估是否应完成
+    suggestion: 评估标记是否应在合并前完成，或将 TODO 转换为 issue
+
+# ── 注意事项 ──
+# 1. 正则规则对所有语言生效（见 static_check.py: _regex_check）
+# 2. 新增规则时考虑跨语言适用性 — 如果只对某语言有效，放入对应语言的 YAML
+# 3. 正则使用 Python re 模块语法

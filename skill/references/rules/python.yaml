@@ -1,0 +1,83 @@
+# Python 静态检查规则
+# 格式：每个规则包含 id, kind, severity, description, check 字段
+# check 字段是声明式约束，不是代码 — static_check.py 读取并执行
+
+language: python
+version: 1
+updated: "2026-07-12"
+
+# ── 阈值配置 ──
+thresholds:
+  max_function_lines: 50
+  max_nesting: 4
+  max_complexity: 10
+  max_line_length: 120
+
+# ── AST 规则 ──
+ast_rules:
+  - id: mutable_default
+    kind: mutable_default
+    severity: high
+    description: 函数默认参数使用了可变对象（list/dict/set）
+    trigger: FunctionDef 的 args.defaults 或 args.kw_defaults 中包含 List/Dict/Set 节点或 list()/dict()/set() 调用
+    rationale: Python 的默认参数在函数定义时求值一次，可变对象会被所有调用共享，导致难以调试的状态累积
+    example_bad: "def f(a=[]): ..."
+    example_good: "def f(a=None):\n    if a is None:\n        a = []"
+
+  - id: long_function
+    kind: long_function
+    severity: medium
+    description: 函数行数超过 {max_function_lines} 行
+    trigger: FunctionDef 的 end_lineno - lineno + 1 > thresholds.max_function_lines
+    rationale: 长函数难以理解和测试，应拆分为职责单一的小函数
+    check: length_check
+
+  - id: high_complexity
+    kind: high_complexity
+    severity: medium
+    description: 函数圈复杂度超过 {max_complexity}
+    trigger: 函数体内 If/For/While/ExceptHandler/BoolOp/comprehension 节点计数 + 1 > thresholds.max_complexity
+    rationale: 高复杂度意味着多分支逻辑，难以测试覆盖和推理
+    note: v0.1 近似算法 — 多操作数 BoolOp（如 a and b and c）计数为 1，存在轻微低估
+    check: complexity_check
+
+  - id: deep_nesting
+    kind: deep_nesting
+    severity: medium
+    description: 函数嵌套深度超过 {max_nesting}
+    trigger: _max_nesting(FunctionDef) > thresholds.max_nesting
+    rationale: 深层嵌套降低可读性，应使用提前返回或提取函数
+    note: 嵌套深度含函数体自身层级（≥1），max_nesting=4 表示最多 4 层（含函数体）
+    check: nesting_check
+
+  - id: bare_except
+    kind: bare_except
+    severity: medium
+    description: 裸 except 捕获所有异常，包括 KeyboardInterrupt 和 SystemExit
+    trigger: ExceptHandler 的 type 字段为 None
+    rationale: 裸 except 会吞掉系统退出信号，且无法区分预期和非预期异常
+    example_bad: "except:\n    pass"
+    example_good: "except FileNotFoundError:\n    pass"
+
+  - id: is_literal
+    kind: is_literal
+    severity: medium
+    description: 使用 'is' / 'is not' 比较字面量常量（None 除外）
+    trigger: Compare 节点中 Is/IsNot 操作符的右操作数为 Constant 且值不是 None
+    rationale: 'is' 比较对象身份而非值，Python 对字面量的 is 行为是实现细节（如小整数缓存），不应依赖
+    exception: "`is None` 和 `is not None` 是 PEP 8 推荐的惯用写法，不做告警"
+    example_bad: "if value is True: ..."
+    example_good: "if value: ..."
+
+  - id: syntax_error
+    kind: syntax_error
+    severity: high
+    description: Python 语法错误，AST 解析失败
+    trigger: ast.parse() 抛出 SyntaxError
+    rationale: 语法错误意味着代码无法执行，必须修复
+
+# ── 注意事项 ──
+# 1. 修改阈值后运行 python skill/scripts/static_check.py 验证 smoke tests
+# 2. 新增规则时同步更新 tests/test_record.md 的 E2E 基线
+# 3. 规则 id 不可重复；kind 是 finding 的分类标签，可在多个规则间共享
+# 4. description 中的 {max_function_lines} 等占位符由 static_check.py 在生成 finding 时填充实际值

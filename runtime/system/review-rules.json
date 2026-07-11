@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "system_version": "v0.2",
+  "updated": "2026-07-12",
+  "languages": [
+    {
+      "id": "python",
+      "name": "Python",
+      "rule_file": "skill/references/rules/python.yaml",
+      "check_function": "_python_check",
+      "description": "Python AST 静态检查 + 通用正则规则",
+      "extensions": [".py", ".pyw"],
+      "ast_based": true
+    },
+    {
+      "id": "go",
+      "name": "Go",
+      "rule_file": "skill/references/rules/go.yaml",
+      "check_function": "_regex_check",
+      "description": "Go 语言当前仅支持正则层检查，AST 规则计划于 v0.3 扩展",
+      "extensions": [".go"],
+      "ast_based": false
+    },
+    {
+      "id": "javascript",
+      "name": "JavaScript",
+      "rule_file": "skill/references/rules/javascript.yaml",
+      "check_function": "_regex_check",
+      "description": "JavaScript 当前仅支持正则层检查，AST 规则计划于 v0.3 扩展",
+      "extensions": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+      "ast_based": false
+    }
+  ],
+  "universal_rules": {
+    "rule_file": "skill/references/rules/universal.yaml",
+    "description": "所有语言共享的正则层规则"
+  },
+  "severities": {
+    "high": {
+      "label": "高",
+      "description": "安全漏洞、数据丢失风险、确定性的运行时错误",
+      "action": "阻止合并"
+    },
+    "medium": {
+      "label": "中",
+      "description": "可维护性问题、潜在 Bug、性能隐患",
+      "action": "修复后合并"
+    },
+    "low": {
+      "label": "低",
+      "description": "风格建议、TODO 标记、行宽超标",
+      "action": "可合并（建议修复）"
+    }
+  },
+  "risk_levels": {
+    "阻止合并": "存在 high 级别 finding，必须先修复",
+    "修复后合并": "存在 medium/low 级别 finding，建议修复但不强制",
+    "可合并": "无 finding 或仅有可忽略的低风险项"
+  },
+  "cache": {
+    "dir": "data/.cache",
+    "ttl_days": 7,
+    "key_algorithm": "sha256(code + lang + model_ver)[:16]",
+    "strategy": "CQRS — 读路径查缓存，写路径存缓存"
+  },
+  "breaker": {
+    "default_threshold": 3,
+    "default_cooldown_seconds": 60,
+    "states": ["CLOSED", "OPEN", "HALF_OPEN"],
+    "description": "AI 子系统熔断器 — CLOSED→OPEN→HALF_OPEN→CLOSED，阻止级联失败"
+  },
+  "rules": {
+    "rules_are_declarative": true,
+    "thresholds_live_in_yaml": true,
+    "code_only_executes": true,
+    "new_language_requires_rule_file": true,
+    "max_function_lines_default": 50,
+    "max_nesting_default": 4,
+    "max_line_length_default": 120,
+    "max_complexity_default": 10,
+    "filesystem_is_source_of_truth": true,
+    "cache_is_derived": true
+  }
+}

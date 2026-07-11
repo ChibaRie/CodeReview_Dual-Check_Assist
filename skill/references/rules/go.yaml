@@ -1,0 +1,17 @@
+# Go 静态检查规则（v0.3 占位）
+# 当前仅正则层支持。Go AST 规则计划通过 go/parser 实现。
+
+language: go
+version: 1
+updated: "2026-07-12"
+status: placeholder
+
+thresholds:
+  max_function_lines: 50
+  max_line_length: 120
+
+# 计划中的 AST 规则（v0.3）:
+# - nil_dereference: 可能的 nil 指针解引用
+# - error_unchecked: 未检查返回的 error 值
+# - shadow_variable: 内层变量遮蔽外层同名变量
+# - defer_in_loop: 循环中使用 defer 可能导致资源延迟释放

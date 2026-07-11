@@ -16,8 +16,32 @@
     }
   ],
   "breaker": {
-    "threshold": 3,
-    "cooldown": 60
+    "default": {
+      "threshold": 3,
+      "cooldown": 60
+    },
+    "per_language": {
+      "python": {
+        "threshold": 3,
+        "cooldown": 30
+      },
+      "go": {
+        "threshold": 3,
+        "cooldown": 30
+      },
+      "javascript": {
+        "threshold": 3,
+        "cooldown": 30
+      },
+      "java": {
+        "threshold": 5,
+        "cooldown": 60
+      },
+      "rust": {
+        "threshold": 3,
+        "cooldown": 30
+      }
+    }
   },
   "cache": {
     "dir": "data/.cache",
@@ -26,6 +50,7 @@
   "review": {
     "max_function_lines": 50,
     "max_nesting": 4,
+    "max_line_length": 120,
     "max_file_lines": 800
   }
 }
