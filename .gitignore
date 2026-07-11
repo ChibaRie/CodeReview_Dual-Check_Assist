@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 缓存与派生产物
+data/.cache/
+*.tmp
+
+# 系统
+.DS_Store
+Thumbs.db
