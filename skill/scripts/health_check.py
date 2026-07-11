@@ -97,7 +97,9 @@ def run(cache_dir: str, status_path: str) -> dict:
         f"| Breaker | {status['health']['breaker']} |",
         f"| **Overall** | **{status['health']['overall']}** |", "",
     ]
-    Path(status_path).write_text("\n".join(md_lines), encoding="utf-8")
+    status_path_obj = Path(status_path)
+    status_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    status_path_obj.write_text("\n".join(md_lines), encoding="utf-8")
 
     return status
 

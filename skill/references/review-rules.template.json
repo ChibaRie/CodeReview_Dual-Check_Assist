@@ -1,7 +1,7 @@
 {
   "version": 1,
   "system_version": "v0.9.2",
-  "updated": "2026-07-12",
+  "updated": "__DATE__",
   "languages": [
     {
       "id": "python",
@@ -35,7 +35,7 @@
       "name": "JavaScript",
       "rule_file": "skill/references/rules/javascript.yaml",
       "check_function": "_javascript_check",
-      "description": "JavaScript 正则层静态检查（var声明/==比较/console残留/回调嵌套），支持 TS",
+      "description": "JavaScript/TypeScript 正则层静态检查（var声明/==比较/console残留/回调嵌套）",
       "extensions": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
       "ast_based": false
     }
@@ -45,21 +45,9 @@
     "description": "所有语言共享的正则层规则"
   },
   "severities": {
-    "high": {
-      "label": "高",
-      "description": "安全漏洞、数据丢失风险、确定性的运行时错误",
-      "action": "阻止合并"
-    },
-    "medium": {
-      "label": "中",
-      "description": "可维护性问题、潜在 Bug、性能隐患",
-      "action": "修复后合并"
-    },
-    "low": {
-      "label": "低",
-      "description": "风格建议、TODO 标记、行宽超标",
-      "action": "可合并（建议修复）"
-    }
+    "high": { "label": "高", "description": "安全漏洞、数据丢失风险、确定性的运行时错误", "action": "阻止合并" },
+    "medium": { "label": "中", "description": "可维护性问题、潜在 Bug、性能隐患", "action": "修复后合并" },
+    "low": { "label": "低", "description": "风格建议、TODO 标记、行宽超标", "action": "可合并（建议修复）" }
   },
   "risk_levels": {
     "阻止合并": "存在 high 级别 finding，必须先修复",
@@ -76,6 +64,6 @@
     "default_threshold": 3,
     "default_cooldown_seconds": 60,
     "states": ["CLOSED", "OPEN", "HALF_OPEN"],
-    "description": "AI 子系统熔断器 — CLOSED→OPEN→HALF_OPEN→CLOSED，阻止级联失败"
+    "description": "AI 子系统熔断器 — CLOSED→OPEN→HALF_OPEN→CLOSED"
   }
 }

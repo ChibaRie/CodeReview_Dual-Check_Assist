@@ -49,14 +49,12 @@ rules:
 
   - kind: unused_import
     severity: low
-    description: "未使用的 import 语句"
-    pattern: "import 的类在文件中未被引用"
+    description: "未使用的 import 语句（规划中）"
+    status: planned
     fix: "删除未使用的 import，保持代码整洁"
-    rationale: "Exp8 发现 UserLoginController 中有多余 import"
 
   - kind: missing_transactional
     severity: medium
-    description: "写操作缺少 @Transactional 注解"
-    pattern: "insert/update/delete 方法无 @Transactional"
+    description: "写操作缺少 @Transactional 注解（规划中）"
+    status: planned
     fix: "添加 @Transactional 注解确保事务一致性"
-    rationale: "Exp8 发现 DeptDao.insert() 缺少事务注解"

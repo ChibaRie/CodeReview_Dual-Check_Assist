@@ -36,10 +36,6 @@
       "java": {
         "threshold": 5,
         "cooldown": 60
-      },
-      "rust": {
-        "threshold": 3,
-        "cooldown": 30
       }
     }
   },
