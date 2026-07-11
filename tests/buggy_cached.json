@@ -1,0 +1,57 @@
+{
+  "risk": "阻止合并",
+  "summary": "风险等级: 阻止合并; 静态问题 7 条",
+  "static_summary": "发现 7 条静态问题",
+  "ai_summary": "AI 深检未运行（熔断降级或模型链全部失败）",
+  "findings": [
+    {
+      "line": 2,
+      "layer": "static",
+      "kind": "mutable_default",
+      "severity": "high",
+      "message": "函数 add_item 使用可变默认参数"
+    },
+    {
+      "line": 15,
+      "layer": "static",
+      "kind": "deep_nesting",
+      "severity": "medium",
+      "message": "函数 classify 嵌套深度超过 4"
+    },
+    {
+      "line": 11,
+      "layer": "static",
+      "kind": "bare_except",
+      "severity": "medium",
+      "message": "裸 except 捕获所有异常，建议指定异常类型"
+    },
+    {
+      "line": 16,
+      "layer": "static",
+      "kind": "is_literal",
+      "severity": "medium",
+      "message": "用 'is' 比较字面量，应改用 '=='"
+    },
+    {
+      "line": 17,
+      "layer": "static",
+      "kind": "is_literal",
+      "severity": "medium",
+      "message": "用 'is' 比较字面量，应改用 '=='"
+    },
+    {
+      "line": 23,
+      "layer": "static",
+      "kind": "todo_marker",
+      "severity": "low",
+      "message": "存在 TODO/FIXME 标记"
+    },
+    {
+      "line": 24,
+      "layer": "static",
+      "kind": "todo_marker",
+      "severity": "low",
+      "message": "存在 TODO/FIXME 标记"
+    }
+  ]
+}
