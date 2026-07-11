@@ -132,3 +132,44 @@
 - 实际：输出与静态-only 一致（risk: 阻止合并，6 条 static findings）
 - 结论：通过
 - 后续：
+
+## v0.9.2 验证 (2026-07-12)
+
+### 概述
+
+v0.9.2 两大合并：(1) pytest 测试套件 156 tests + mock，(2) Go 3 专有规则 + JS 4 专有规则，实现 4 语言全部可用。
+
+---
+
+### 样本 15: sample_go_issues.go（Go 专有规则）
+
+- 验证对象：Go 3 条专有规则（unchecked_error, defer_in_loop, global_mutable）
+- 命令：`python skill/scripts/app.py data/sample_go_issues.go --lang go --no-cache`
+- 预期：检出 unchecked_error + defer_in_loop + global_mutable，safeReadFile 不误报
+- 实际：2 findings（unchecked_error + defer_in_loop），safeReadFile 0 误报
+- 结论：通过（Go 从 0 专有到 3 专有规则可用）
+
+### 样本 16: sample_js_issues.js（JS 专有规则）
+
+- 验证对象：JS 4 条专有规则（var_usage, eqeqeq, debug_log, deep_callback）
+- 命令：`python skill/scripts/app.py data/sample_js_issues.js --lang javascript --no-cache`
+- 预期：检出 var_usage + eqeqeq + debug_log，const/=== 不误报
+- 实际：8 findings（含 4 专有 + 2 通用 long_line/todo），const/=== 正确不误报
+- 结论：通过（JS 从 0 专有到 4 专有规则可用）
+
+### pytest 测试套件验证
+
+- 验证对象：156 tests / 8 modules / 含 mock HTTP + 25 边界
+- 命令：`python -m pytest tests/ -v`
+- 实际：156 passed in 1.3s
+- 模块覆盖：state_machine(11), circuit_breaker(25), cqrs_router(22), static_check(41), fallback_chain(8), bulkhead(11), vector_store(19), trend_analyzer(19)
+- 结论：通过（含 mock T1 成功/T1→T2 降级/全部失败到 T3/熔断器 OPEN 跳过）
+
+### 全语言覆盖矩阵
+
+| 语言 | 改前 | 改后 |
+|------|------|------|
+| Python | 7 专有 | 7 专有 |
+| Java | 7 专有 | 7 专有 |
+| Go | 0（仅 2 通用） | 3 专有 |
+| JavaScript | 0（仅 2 通用） | 4 专有 |

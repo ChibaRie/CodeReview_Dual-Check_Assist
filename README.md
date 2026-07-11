@@ -2,9 +2,9 @@
   <h1 align="center">🔍 AI 代码评审「双检」助手</h1>
   <p align="center"><i>DualCheck Code — 让独立开发者拥有稳定可靠的自动化 Code Review</i></p>
   <p align="center">
-    <img src="https://img.shields.io/badge/version-v0.8-blue" alt="version">
+    <img src="https://img.shields.io/badge/version-v0.9.2-blue" alt="version">
     <img src="https://img.shields.io/badge/python-3.10+-green" alt="python">
-    <img src="https://img.shields.io/badge/languages-python_|_java_|_go_|_javascript-orange" alt="languages">
+    <img src="https://img.shields.io/badge/languages-python(7)_|_java(7)_|_go(3)_|_javascript(4)-orange" alt="languages">
   </p>
 </p>
 
@@ -281,7 +281,7 @@ Bug 密度（每千行）：
 
 ---
 
-### v0.8 — Java 静态规则包 ← 当前
+### v0.9.2 — 测试套件 + Go/JS 规则 + 全语言覆盖 ← 当前
 
 > **😫 痛点**：Exp8 校园管理系统 7 个 Java 文件，系统全部返回 **0 findings**。人工审查却发现 **8 个真实问题**（3 CRITICAL + 1 HIGH + 4 MEDIUM）：SQL 注入、明文密码、资源泄漏全部漏检。
 
@@ -339,6 +339,45 @@ Bug 密度（每千行）：
 
 ---
 
+### v0.9.2 — 测试套件 + Go/JS 全语言覆盖
+
+> **😫 痛点 1**：测试覆盖率不足——只有 `if __name__ == "__main__"` 冒烟测试，无 mock（LLM 真调 HTTP）、无边界测试、无覆盖率度量。
+> **😫 痛点 2**：Go 和 JavaScript 仅 2 条通用规则（long_line + todo_marker），几乎不可用。项目宣传 4 种语言，实际仅 Python 有 AST。
+
+| 指标 | 改前 | 改后 |
+|------|------|------|
+| 测试框架 | `if __name__` 简单断言 | **pytest 156 测试，8 个模块全覆盖** |
+| Mock 能力 | ❌ 无（真调 HTTP） | ✅ `unittest.mock` 模拟 LLM 调用 |
+| 边界测试 | ❌ 无 | ✅ 空文件/超大文件/Unicode/并发/损坏数据 |
+| Go 专有规则 | 0 条 | **3 条**（unchecked_error, defer_in_loop, global_mutable） |
+| JS 专有规则 | 0 条 | **4 条**（var_usage, eqeqeq, debug_log, deep_callback） |
+| 全语言可用 | ❌ Go/JS 基本不可用 | ✅ **4 语言全部有专有规则** |
+
+> **根因 1**：早期迭代用 `__main__` 冒烟测试快速验证，缺乏正式测试框架。LLM 调用未抽象，无法 mock。
+> **根因 2**：v0.1 仅实现 Python AST，v0.8 补充 Java，Go 和 JS 被延迟到模糊的"后续版本"。
+>
+> **方案**：
+> - **pytest 测试套件**：`tests/` 下 8 个 `test_*.py` 文件 + `conftest.py`（共享 fixtures、mock 工具、边界样本）。覆盖 state_machine、circuit_breaker、cqrs_router、static_check、fallback_chain（含 mock HTTP）、bulkhead、vector_store、trend_analyzer。
+> - **Mock 层**：`conftest.py` 提供 `mock_http_success`/`mock_http_failure`/`mock_http_auth_error` fixtures，用 `unittest.mock.patch` 替换 `urllib.request.urlopen`。
+> - **边界覆盖**：空代码、空文件、超大文件（2000 行）、Unicode/emoji、特殊字符（正则转义）、并发读写、TTL 过期、损坏 JSON、threshold=0 极值。
+> - **Go 规则**（`_go_check()`）：`unchecked_error`（:= 返回 error 缺 err != nil）、`defer_in_loop`（for 循环内 defer 资源泄漏）、`global_mutable`（包级 var 全局变量）。
+> - **JS 规则**（`_javascript_check()`）：`var_usage`（var → let/const）、`eqeqeq`（== → ===）、`debug_log`（console.log 残留）、`deep_callback`（缩进 > 80 字符）。
+> - **声明式规则**：`go.yaml`（5 条）、`javascript.yaml`（6 条）。
+> - 涉及 `static_check.py` `tests/conftest.py` `tests/test_*.py` `rules/go.yaml` `rules/javascript.yaml`。
+>
+> **实测**：156/156 pytest 测试全部通过（1.3s），含 25 个边界测试 + 8 个 mock 测试。Go 样本检出 unchecked_error + defer_in_loop + global_mutable。JS 样本检出 var_usage + eqeqeq + debug_log（8 findings）。
+
+**全语言覆盖矩阵：**
+
+| 语言 | 规则引擎 | 专有规则 | 通用规则 | 覆盖率 |
+|------|---------|---------|---------|:--:|
+| **Python** | AST 解析 | 7 条（mutable_default, bare_except, ...） | 2 条 | ✅ 完整 |
+| **Java** | 正则模式匹配 | 7 条（sql_injection, hardcoded_secret, ...） | 2 条 | ✅ 完整 |
+| **Go** | 正则模式匹配 | 3 条（unchecked_error, defer_in_loop, ...） | 2 条 | ✅ 可用 |
+| **JavaScript** | 正则模式匹配 | 4 条（var_usage, eqeqeq, debug_log, ...） | 2 条 | ✅ 可用 |
+
+---
+
 ### 迭代合规总览
 
 | 版本 | Step 1 痛点 | Step 2 量化 | Step 3 根因 | Step 4 方案 | Step 5 实测 | 合规 |
@@ -349,6 +388,7 @@ Bug 密度（每千行）：
 | v0.6 向量记忆 | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
 | v0.7 质量趋势报告 | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
 | v0.8 Java 规则 | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
+| v0.9.2 测试 + Go/JS | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
 
 > 违反 5 步迭代法的迭代视为未完成。详见 [`iteration/iteration_log.md`](iteration/iteration_log.md)。
 
@@ -463,7 +503,9 @@ AI_Code_Review_Dual-Check_Assist/
 | 语言 | 检查方式 | 规则数 | 备注 |
 |------|---------|--------|------|
 | **Python** | AST 解析 + 正则 | 7 AST + 2 通用 | 完整 AST 支持 |
-| **Java** | 正则模式匹配 | 8 专有 + 2 通用 | v0.8 新增，覆盖 SQL 注入等 |
+| **Java** | 正则模式匹配 | 7 专有 + 2 通用 | v0.8 新增，覆盖 SQL 注入等 |
+| **Go** | 正则模式匹配 | 3 专有 + 2 通用 | v0.9 新增，覆盖错误检查等 |
+| **JavaScript** | 正则模式匹配 | 4 专有 + 2 通用 | v0.9 新增，覆盖 var/==/console |
 | Go | 正则层 | 2 通用 | AST 规则规划中（`go/parser`） |
 | JavaScript | 正则层 | 2 通用 | ESLint 规则子集规划中 |
 

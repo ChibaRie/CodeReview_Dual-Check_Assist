@@ -213,6 +213,109 @@ def _java_check(code: str) -> list[Finding]:
     return findings
 
 
+def _go_check(code: str) -> list[Finding]:
+    """Go 静态规则（基于正则模式匹配）。
+
+    覆盖 Go 常见问题：
+      - 未检查错误返回值（err != nil 缺失）
+      - defer 在循环中（资源泄漏）
+      - 包级可变全局变量
+    """
+    findings: list[Finding] = []
+    lines = code.splitlines()
+
+    # ── 未检查错误返回值 ──
+    # Go 中返回 (result, error) 的函数调用后应跟 if err != nil
+    for i, line in enumerate(lines, 1):
+        # 检测 := 赋值中的 error 返回但后续无 err != nil
+        if re.search(r':=\s+[\w.]+\(.*\)', line) and not re.search(r'if\s+err\s*!=\s*nil', line):
+            # 检查后续 3 行内是否有 err != nil
+            has_check = False
+            for j in range(i, min(i + 4, len(lines) + 1)):
+                if re.search(r'if\s+err\s*!=\s*nil', lines[j - 1]):
+                    has_check = True
+                    break
+            if not has_check and re.search(r',\s*err\s*:', line):
+                findings.append(Finding(
+                    i, "unchecked_error", "high",
+                    "未检查错误：函数返回 error 但缺少 if err != nil 检查",
+                ))
+
+    # ── defer 在循环中 ──
+    in_loop = False
+    for i, line in enumerate(lines, 1):
+        if re.search(r'\bfor\s+', line.strip()):
+            in_loop = True
+        if in_loop and re.search(r'\bdefer\s+', line):
+            findings.append(Finding(
+                i, "defer_in_loop", "high",
+                "资源泄漏风险：defer 在循环中不会在每次迭代后执行，应封装为函数",
+            ))
+        if in_loop and line.strip() == "}":
+            in_loop = False
+
+    # ── 包级可变变量 ──
+    for i, line in enumerate(lines, 1):
+        if re.match(r'^\s*var\s+\w+\s+\w+\s*=', line):
+            findings.append(Finding(
+                i, "global_mutable", "medium",
+                "包级可变变量：全局状态降低可测试性，考虑封装到 struct 中",
+            ))
+
+    return findings
+
+
+def _javascript_check(code: str) -> list[Finding]:
+    """JavaScript/TypeScript 静态规则（基于正则模式匹配）。
+
+    覆盖 JS/TS 常见问题：
+      - var 声明（应用 let/const）
+      - == 代替 ===（类型不安全比较）
+      - console.log 调试残留
+      - 回调嵌套过深
+    """
+    findings: list[Finding] = []
+    lines = code.splitlines()
+
+    # ── var 声明（应用 let/const） ──
+    for i, line in enumerate(lines, 1):
+        if re.search(r'\bvar\s+\w+\s*=', line):
+            findings.append(Finding(
+                i, "var_usage", "medium",
+                "使用 var 声明变量：var 有函数作用域提升问题，应用 let 或 const",
+            ))
+
+    # ── == 代替 === ──
+    for i, line in enumerate(lines, 1):
+        # 排除 null == undefined 等有意义的 == 使用...使用简单检测
+        if re.search(r'[^=!<>]==[^=]', line) and not re.search(r'null\s*==|==\s*null', line):
+            findings.append(Finding(
+                i, "eqeqeq", "medium",
+                "类型不安全的比较：== 会做类型转换，应用 === 避免意外",
+            ))
+
+    # ── console.log 调试残留 ──
+    for i, line in enumerate(lines, 1):
+        if re.search(r'\bconsole\.(?:log|debug|info|warn)\s*\(', line):
+            findings.append(Finding(
+                i, "debug_log", "medium",
+                "调试代码残留：console.log 应在生产代码中移除",
+            ))
+
+    # ── 回调嵌套深度检测 ──
+    # 简化：计算每行的缩进深度来推断嵌套
+    for i, line in enumerate(lines, 1):
+        indent = len(line) - len(line.lstrip())
+        if indent > 80:  # 20 层 × 4 空格
+            findings.append(Finding(
+                i, "deep_callback", "medium",
+                "回调嵌套过深：考虑使用 async/await 或 Promise 链替代深层回调",
+            ))
+            break  # 只报告一次
+
+    return findings
+
+
 def _regex_check(code: str, *, max_line_length: int = 120) -> List[Finding]:
     findings: List[Finding] = []
     for i, line in enumerate(code.splitlines(), 1):
@@ -234,6 +337,10 @@ def static_check(code: str, lang: str, *,
         findings = _python_check(code, max_function_lines, max_nesting)
     elif lang == "java":
         findings = _java_check(code)
+    elif lang == "go":
+        findings = _go_check(code)
+    elif lang in ("javascript", "typescript", "js", "ts"):
+        findings = _javascript_check(code)
     else:
         findings = []
     findings += _regex_check(code, max_line_length=max_line_length)

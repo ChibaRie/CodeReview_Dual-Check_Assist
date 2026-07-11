@@ -152,6 +152,32 @@ status: active
 
 ---
 
+## 2026-07-12 — v0.9.2 测试套件 + Go/JS 全语言覆盖
+
+- 更新类型：feature
+- 版本迁移：v0.8 -> v0.9.2
+- 更新摘要：两大痛点合并解决：(1) 建立正式 pytest 测试套件（156 测试，含 mock + 边界），(2) 补齐 Go 和 JavaScript 专有规则（3+4 条），实现 4 语言全部可用。
+- 涉及文件：tests/（conftest.py + 8 个 test_*.py）, skill/scripts/static_check.py；skill/references/rules/go.yaml, javascript.yaml；data/sample_go_issues.go, data/sample_js_issues.js；README.md；tests/test_record.md
+- 核心变更：
+  - **pytest 测试套件**：`tests/` 下 8 个 `test_*.py` + `conftest.py`（共享 fixtures、mock 工具、边界样本）。156 个测试覆盖 9 个模块。
+  - **Mock 层**：`conftest.py` 提供 `mock_http_success`/`mock_http_failure`/`mock_http_auth_error` fixtures，`unittest.mock.patch` 替换 `urllib.request.urlopen`。降级链 T1→T2→T3 全路径可测。
+  - **边界测试**：25 个边界用例（空代码、超大文件 2000 行、Unicode emoji、正则转义字符串、并发读写、TTL 过期、损坏 JSON、threshold=0 极值、cooldown 极端值）。
+  - **Go 规则**（`_go_check()`）：3 条专有规则 — `unchecked_error`（:= 返回 error 缺 err != nil）、`defer_in_loop`（for 循环内 defer）、`global_mutable`（包级 var）。
+  - **JS 规则**（`_javascript_check()`）：4 条专有规则 — `var_usage`（var→let/const）、`eqeqeq`（==→===）、`debug_log`（console.log/debug/warn 残留）、`deep_callback`（缩进 > 80 字符）。
+  - **声明式规则**：`go.yaml`（5 条）、`javascript.yaml`（6 条）。
+  - **语言分发**：`static_check()` 新增 `go`/`javascript`/`typescript`/`js`/`ts` 路由。
+- 量化效果：
+  - 测试框架：从 `__main__` 简单断言 → **pytest 156 tests / 8 modules**（含 mock HTTP + 25 边界）
+  - Go 专有规则：0 → **3 条**（从不可用到可用）
+  - JS 专有规则：0 → **4 条**（从不可用到可用）
+  - 全语言可用：Python ✅ Java ✅ Go ✅ JavaScript ✅
+- 测试样本扩展：
+  - 新增 `data/sample_go_issues.go`：unchecked_error + defer_in_loop + global_mutable（含 safeReadFile 对照）
+  - 新增 `data/sample_js_issues.js`：var + == + console.log（含 const/=== 对照）
+  - 基线回归：样本 1-14 全部通过
+- 测试记录：`tests/test_record.md` 新增 v0.9.2 验证章节
+- 后续注意：v0.10 计划覆盖率度量（pytest-cov）、CI 集成（GitHub Actions）、Java hardcoded_secret 误报修复（toString 排除）。
+
 ## 2026-07-12 — v0.8 Java 静态规则包
 
 - 更新类型：feature

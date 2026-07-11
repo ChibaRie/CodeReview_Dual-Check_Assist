@@ -1,17 +1,36 @@
-# Go 静态检查规则（v0.3 占位）
-# 当前仅正则层支持。Go AST 规则计划通过 go/parser 实现。
+# Go 静态检查规则 (v0.9)
+# 基于正则模式匹配实现。Go AST 规则计划通过 go/parser 扩展。
 
 language: go
-version: 1
+version: "0.9"
 updated: "2026-07-12"
-status: placeholder
 
 thresholds:
   max_function_lines: 50
   max_line_length: 120
 
-# 计划中的 AST 规则（v0.3）:
+rules:
+  - kind: unchecked_error
+    severity: high
+    description: "未检查错误：函数返回 error 但缺少 if err != nil 检查"
+    pattern: ':= ...(...) 中 err 返回值后 3 行内无 if err != nil'
+    fix: "添加错误检查: if err != nil { return err }"
+    rationale: "Go 中忽略 error 是常见的严重 Bug 来源"
+
+  - kind: defer_in_loop
+    severity: high
+    description: "defer 在循环中使用，资源不会在每次迭代后释放"
+    pattern: "for 循环体内调用 defer"
+    fix: "将循环体封装为函数，或手动在迭代末尾释放资源"
+    rationale: "defer 在函数返回时才执行，循环中使用 defer 会导致资源累积"
+
+  - kind: global_mutable
+    severity: medium
+    description: "包级可变变量降低可测试性和并发安全性"
+    pattern: "var <name> <type> = <value> 在包级作用域"
+    fix: "封装到 struct 中作为字段，或使用常量/函数返回值替代"
+    rationale: "全局可变状态增加耦合和竞态风险"
+
+# 计划中的 AST 规则:
 # - nil_dereference: 可能的 nil 指针解引用
-# - error_unchecked: 未检查返回的 error 值
 # - shadow_variable: 内层变量遮蔽外层同名变量
-# - defer_in_loop: 循环中使用 defer 可能导致资源延迟释放

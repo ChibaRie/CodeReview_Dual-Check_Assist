@@ -1,18 +1,44 @@
-# JavaScript/TypeScript 静态检查规则（v0.3 占位）
-# 当前仅正则层支持。JS/TS AST 规则计划通过 ESLint 规则子集实现。
+# JavaScript/TypeScript 静态检查规则 (v0.9)
+# 基于正则模式匹配实现。计划扩展 ESLint 规则子集。
 
 language: javascript
-version: 1
+version: "0.9"
 updated: "2026-07-12"
-status: placeholder
 
 thresholds:
   max_function_lines: 50
   max_line_length: 120
 
-# 计划中的 AST 规则（v0.3）:
+rules:
+  - kind: var_usage
+    severity: medium
+    description: "使用 var 声明变量，存在函数作用域提升问题"
+    pattern: 'var <name> = ...'
+    fix: "改用 let 或 const 声明变量"
+    rationale: "var 的函数作用域和提升行为是常见的变量覆盖 Bug 来源"
+
+  - kind: eqeqeq
+    severity: medium
+    description: "使用 == 而非 ===，类型不安全比较"
+    pattern: '== 比较（排除 null == undefined 场景）'
+    fix: "改用 === 严格相等比较"
+    rationale: "== 的类型转换逻辑复杂且不直观，容易产生意外结果"
+
+  - kind: debug_log
+    severity: medium
+    description: "console.log/debug/info/warn 调试残留"
+    pattern: 'console.(log|debug|info|warn)('
+    fix: "生产代码中移除 console 调用，或使用统一的日志工具"
+    rationale: "调试输出在生产环境中泄露信息并影响性能"
+
+  - kind: deep_callback
+    severity: medium
+    description: "回调嵌套过深（缩进 > 80 字符）"
+    pattern: "行首缩进 > 80 字符"
+    fix: "使用 async/await 或 Promise 链（.then()）替代深层回调嵌套"
+    rationale: "深层回调（回调地狱）降低可读性和可维护性"
+
+# 计划中的 AST 规则:
 # - no_unused_vars: 未使用的变量声明
-# - no_undefined: 使用未定义的变量
-# - eqeqeq: 使用 == 而非 ===
-# - no_var: 使用 var 而非 let/const
 # - promise_no_await: Promise 未 await
+# - no_eval: 使用 eval()
