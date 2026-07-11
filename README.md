@@ -541,3 +541,10 @@ AI_Code_Review_Dual-Check_Assist/
 1. **位置**：`tests/test_record.md`，按版本分组
 2. **条目格式**：验证对象 → 命令 → 预期 → 实际（JSON）→ 结论 → 后续
 3. **回归**：每次迭代必须回归全部已有样本
+
+---
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+  <br><sub>Copyright © 2026 ChibaRie — 自由使用、修改、分发</sub>
+</p>
