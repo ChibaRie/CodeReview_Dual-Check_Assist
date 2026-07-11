@@ -21,7 +21,7 @@ class StaticReport:
     summary: str = ""
 
 
-def _max_nesting(tree_node) -> int:
+def _max_nesting(tree_node: ast.AST) -> int:
     def visit(node, d):
         body = getattr(node, "body", None)
         if not isinstance(body, list):
@@ -43,6 +43,9 @@ def _python_check(code: str, max_fn: int, max_nest: int) -> List[Finding]:
             if length > max_fn:
                 findings.append(Finding(node.lineno, "long_function", "medium",
                                        f"函数 {node.name} 共 {length} 行，超过 {max_fn}"))
+            # Note: approximates cyclomatic complexity by counting branch nodes.
+            # Multi-operand BoolOp (e.g. `a and b and c`) is counted as 1, which
+            # undercounts; acceptable rough approximation for v0.1.
             branches = sum(1 for n in ast.walk(node)
                            if isinstance(n, (ast.If, ast.For, ast.While,
                                              ast.ExceptHandler, ast.BoolOp,
@@ -57,6 +60,15 @@ def _python_check(code: str, max_fn: int, max_nest: int) -> List[Finding]:
                 elif isinstance(arg, ast.Call) and getattr(arg.func, "id", "") in ("list", "dict", "set"):
                     findings.append(Finding(node.lineno, "mutable_default", "high",
                                            f"函数 {node.name} 使用可变默认参数"))
+            for arg in node.args.kw_defaults:
+                if arg is None:
+                    continue
+                if isinstance(arg, (ast.List, ast.Dict, ast.Set)):
+                    findings.append(Finding(node.lineno, "mutable_default", "high",
+                                           f"函数 {node.name} 使用可变默认参数"))
+                elif isinstance(arg, ast.Call) and getattr(arg.func, "id", "") in ("list", "dict", "set"):
+                    findings.append(Finding(node.lineno, "mutable_default", "high",
+                                           f"函数 {node.name} 使用可变默认参数"))
             if _max_nesting(node) > max_nest:
                 findings.append(Finding(node.lineno, "deep_nesting", "medium",
                                        f"函数 {node.name} 嵌套深度超过 {max_nest}"))
@@ -65,9 +77,9 @@ def _python_check(code: str, max_fn: int, max_nest: int) -> List[Finding]:
                 findings.append(Finding(node.lineno, "bare_except", "medium",
                                        "裸 except 捕获所有异常，建议指定异常类型"))
         elif isinstance(node, ast.Compare):
-            for op in node.ops:
-                if isinstance(op, (ast.Is, ast.IsNot)) and any(
-                    isinstance(c, ast.Constant) for c in node.comparators
+            for i, op in enumerate(node.ops):
+                if isinstance(op, (ast.Is, ast.IsNot)) and isinstance(
+                    node.comparators[i], ast.Constant
                 ):
                     findings.append(Finding(node.lineno, "is_literal", "medium",
                                            "用 'is' 比较字面量，应改用 '=='"))
@@ -121,3 +133,28 @@ def very_long_function(p, q, r, s, t, u, v, w):
     report = static_check(sample, "python")
     assert len(report.findings) >= 3, report.findings
     print("static_check smoke PASS:", report.summary)
+
+    # --- Inline verification of the two important fixes ---
+    # Fix 1: chained comparisons pair each operator with its right operand
+    # (old code incorrectly tested operators against comparators that weren't
+    # theirs, e.g. flagging the second 'is' because of the earlier None).
+    chained = "x = (a is None is b)\n"
+    chained_findings = [f for f in _python_check(chained, 50, 4)
+                        if f.kind == "is_literal"]
+    assert len(chained_findings) == 1, (
+        f"expected 1 is_literal finding for chained 'is None is b' "
+        f"(only the 'is None' pair should match), got {len(chained_findings)}: "
+        f"{chained_findings}"
+    )
+
+    # Fix 2: keyword-only defaults should be inspected.
+    kw_default = "def f(*, a=[]):\n    pass\n"
+    kw_findings = [f for f in _python_check(kw_default, 50, 4)
+                    if f.kind == "mutable_default"]
+    assert len(kw_findings) == 1, (
+        f"expected 1 mutable_default finding for kw-only default, "
+        f"got {len(kw_findings)}: {kw_findings}"
+    )
+
+    print("static_check fix-inline PASS: chained-compare & kw-default verified")
+
