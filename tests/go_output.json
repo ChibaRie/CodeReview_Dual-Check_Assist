@@ -1,7 +1,22 @@
 {
-  "risk": "可合并",
-  "summary": "风险等级: 可合并; 静态问题 0 条",
-  "static_summary": "未发现明显静态问题",
+  "risk": "修复后合并",
+  "summary": "风险等级: 修复后合并; 静态问题 2 条",
+  "static_summary": "发现 2 条静态问题",
   "ai_summary": "AI 深检未运行（熔断降级或模型链全部失败）",
-  "findings": []
+  "findings": [
+    {
+      "line": 15,
+      "layer": "static",
+      "kind": "todo_marker",
+      "severity": "low",
+      "message": "存在 TODO/FIXME 标记"
+    },
+    {
+      "line": 17,
+      "layer": "static",
+      "kind": "long_line",
+      "severity": "low",
+      "message": "行 17 长度 144，建议 ≤120"
+    }
+  ]
 }

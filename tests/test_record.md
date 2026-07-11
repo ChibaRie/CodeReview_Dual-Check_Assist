@@ -113,22 +113,37 @@
 
 ```json
 {
-  "risk": "可合并",
-  "summary": "风险等级: 可合并; 静态问题 0 条",
-  "static_summary": "未发现明显静态问题",
+  "risk": "修复后合并",
+  "summary": "风险等级: 修复后合并; 静态问题 2 条",
+  "static_summary": "发现 2 条静态问题",
   "ai_summary": "AI 深检未运行（熔断降级或模型链全部失败）",
-  "findings": []
+  "findings": [
+    {
+      "line": 15,
+      "layer": "static",
+      "kind": "todo_marker",
+      "severity": "low",
+      "message": "存在 TODO/FIXME 标记"
+    },
+    {
+      "line": 17,
+      "layer": "static",
+      "kind": "long_line",
+      "severity": "low",
+      "message": "行 17 长度 144，建议 ≤120"
+    }
+  ]
 }
 ```
 
-- 结论：通过（非 Python 路径未崩溃，返回结构完整）
+- 结论：通过（正则层正确触发 todo_marker 与 long_line，非 Python 路径返回结构完整）
 - 后续：v0.3 扩展 Go 静态规则
 
 ### 缓存命中验证
 - 命令：`time python skill/scripts/app.py data/sample_buggy_code.py --lang python --json`
 - 预期：第二次运行显著快于第一次（<100ms）
 - 实际：第一次 159.2 ms，第二次 114.5 ms
-- 结论：基本通过。Cache 命中有效（第二次无需重新执行静态分析），但因 Windows 进程启动开销未严格 <100 ms；v0.2 可改为库内调用或进程内缓存进一步降低延迟。
+- 结论：未达 <100 ms 目标，原因是 Windows Python 进程启动开销；缓存逻辑本身正确（二次运行仍快于首次），v0.2 可优化
 
 ### 强制重新评审（--no-cache）
 - 命令：`python skill/scripts/app.py data/sample_buggy_code.py --lang python --no-cache --json`
