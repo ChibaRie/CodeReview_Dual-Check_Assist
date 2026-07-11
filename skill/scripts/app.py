@@ -63,9 +63,19 @@ def _build_prompt(static_report: StaticReport, code: str, lang: str, framework: 
     )
 
 def _parse_ai(text: str) -> AIReport | None:
+    raw = text.strip()
+    if raw.startswith("```"):
+        parts = raw.split("\n", 1)
+        raw = parts[1] if len(parts) > 1 else ""
+    if raw.endswith("```"):
+        parts = raw.rsplit("\n", 1)
+        raw = parts[0] if len(parts) > 1 else ""
+    raw = raw.strip()
     try:
-        data = json.loads(text.strip())
+        data = json.loads(raw)
     except Exception:
+        return None
+    if not isinstance(data, dict):
         return None
     def to_findings(xs: list[dict]) -> list[Finding]:
         return [Finding(x.get("line", 0), x.get("kind", ""), x.get("severity", "low"),
@@ -85,7 +95,7 @@ def _risk(ai_report: AIReport | None, static: StaticReport) -> str:
         return "修复后合并"
     return "可合并"
 
-def merge(static_report: StaticReport, ai_report: AIReport | None, ai_text: str) -> FinalReport:
+def merge(static_report: StaticReport, ai_report: AIReport | None) -> FinalReport:
     rows: list[dict] = [{"line": f.line, "layer": "static", "kind": f.kind,
                          "severity": f.severity, "message": f.message} for f in static_report.findings]
     if ai_report:
@@ -124,7 +134,6 @@ def review(code: str, lang: str, framework: str = "", config_path: str = "", use
                                   max_nesting=review_cfg.get("max_nesting", 4))
     state = initial_state()
     ai_report: AIReport | None = None
-    ai_text = ""
     while not is_terminal(state):
         state, action = next_state(state, "")
         if action == "run_static":
@@ -135,17 +144,13 @@ def review(code: str, lang: str, framework: str = "", config_path: str = "", use
         if action == "run_ai":
             prompt = _build_prompt(static_report, code, lang, framework)
             chain = FallbackChain([ModelConfig(**m) for m in config.get("models", [])], breaker)
-            ai_text = chain.call(prompt, static_report)
-            ai_report = _parse_ai(ai_text)
-            if ai_report is None and "AI 深检暂不可用" not in ai_text:
-                breaker.record_failure()  # 模型返回了非 JSON，视为模型失败
-                ai_text = chain.call(prompt, static_report)
-                ai_report = _parse_ai(ai_text)
-        report = merge(static_report, ai_report, ai_text)
-        if router:
-            router.write(key, report.__dict__)
-        return report
-    return merge(static_report, None, "")
+            ai_report = _parse_ai(chain.call(prompt, static_report))
+        if action in ("merge_normal", "merge_degraded"):
+            report = merge(static_report, ai_report)
+            if router:
+                router.write(key, report.__dict__)
+            return report
+    return merge(static_report, None)
 
 def _fmt(report: FinalReport) -> str:
     header = ["# 双检代码评审报告", "", f"风险等级: {report.risk}", "", "## 摘要", report.summary,

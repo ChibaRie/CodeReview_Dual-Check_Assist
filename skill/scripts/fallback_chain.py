@@ -43,7 +43,7 @@ class FallbackChain:
             body = json.loads(resp.read().decode())
         return body["choices"][0]["message"]["content"]
 
-    def _local_fallback(self, prompt: str, static_report: StaticReport) -> str:
+    def _local_fallback(self, static_report: StaticReport) -> str:
         lines = ["## AI 深检暂不可用", "", "原因：模型链全部失败或熔断器已 OPEN。",
                  "", "基于静态快检结果的最小说明：", ""]
         if static_report.findings:
@@ -55,16 +55,14 @@ class FallbackChain:
         return "\n".join(lines)
 
     def call(self, prompt: str, static_report: StaticReport) -> str:
-        last_err = ""
         for model in self.models:
             try:
                 text = self._call_one(model, prompt)
                 self.breaker.record_success()
                 return text
-            except Exception as e:
-                last_err = str(e)
+            except Exception:
                 self.breaker.record_failure()
-        return self._local_fallback(last_err, static_report)
+        return self._local_fallback(static_report)
 
 
 if __name__ == "__main__":
