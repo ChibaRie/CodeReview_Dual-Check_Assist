@@ -22,7 +22,7 @@
 - **不简化 `resolve_cache_dir` 的反推逻辑**：保守路线，逐字移植、零行为变化。原"is_default 反推 base"分支原样保留（含 `cfg.resolve() == default_cfg` 判断）。
 - **不清理 `pool._save()` 私有直调与 `getattr(...)` 兜底**：逐字移植，留待后续迭代。
 - **不引入任何新 `try/except`**：失败模式按旧实现逐字透传。
-- **不为 `review()` 7 个私有方法单独写单测**：会绑死内部实现、阻碍后续清理。公共 `review()` + 现有套件已覆盖。
+- **不为 `review()` 8 个私有方法单独写单测**：会绑死内部实现、阻碍后续清理。公共 `review()` + 现有套件已覆盖。
 - **不引入 `pytest --cov` 门槛、不引入 pytest markers、不重构 `tests/` 目录**。
 - **不动 `conftest.py`**。
 - **不修原始测试 bug**（本轮约束）。
@@ -32,7 +32,7 @@
 ```
 app.py            ← CLI、_fmt、_fmt_perf、_run_batch、_smoke、AIReport/FinalReport 数据类
   │
-  ├── reviewer.py (新)   ← Reviewer 服务：持有 config/cache_dir/pool/vector_db_path，编排 review() 7 步
+  ├── reviewer.py (新)   ← Reviewer 服务：惰性持有 _breaker_pool，编排 review() 8 步
   │     │
   │     ├── config.py (新)   ← load_config / default_config_path / resolve_cache_dir / model_ver
   │     │     └── 仅依赖 stdlib，不 import 任何内部模块
@@ -72,30 +72,40 @@ app.py            ← CLI、_fmt、_fmt_perf、_run_batch、_smoke、AIReport/Fi
 
 ## 5. `reviewer.py` — `Reviewer` 服务与 `review()` 拆分（§3）
 
-### 5.1 构造
+### 5.1 构造（惰性，不固化 config）
+
+`config_path` 不进 `__init__`，而留在 `Reviewer.review` 的参数里——与 `app.review` 同为 5 参 `(code, lang, framework, config_path, use_cache)`，薄转发零损失。这更忠实于旧实现：旧 `review()` 每次 `_load_config(config_path)`（`app.py:193-196`），新实现也每次 `load_config(...)`。pool 惰性首建于 `review()` 第一次调用，复刻旧 `_breaker_pool` `if _breaker_pool is None` 的 quirk（首次 config 固化 pool）。
 
 ```python
 class Reviewer:
-    def __init__(self, config_path: str = ""):
-        cfg_path = config_path or default_config_path()
-        self.config = load_config(cfg_path)
-        cache_cfg = self.config.get("cache", {})
-        cache_dir_raw = cache_cfg.get("dir", "data/.cache")
-        self.cache_dir = resolve_cache_dir(cache_dir_raw, cfg_path)
-        self.cache_ttl_days = cache_cfg.get("ttl_days", 7)
-        self.model_ver = model_ver(self.config.get("models", []))
-        self.breaker_pool = create_pool(
-            self.config,
-            str(Path(self.cache_dir) / ".breaker_state.json"),
+    def __init__(self):
+        self._breaker_pool: BreakerPool | None = None   # 惰性，等价旧模块级 _breaker_pool
+
+    def review(self, code: str, lang: str, framework: str = "",
+               config_path: str = "", use_cache: bool = True
+               ) -> tuple[FinalReport, dict]:
+        cfg, cache_dir, persist_path, pool = self._prepare(config_path)   # 第 0 步
+        ...
+
+    def _prepare(self, config_path: str) -> tuple[dict, str, str, BreakerPool]:
+        cfg = (
+            load_config(config_path) if config_path and Path(config_path).exists()
+            else load_config(default_config_path())        # 逐字保留每次重载
         )
-        self.vector_db_path = str(Path(self.cache_dir) / "patterns.db")
+        cache_cfg = cfg.get("cache", {})
+        cache_dir = resolve_cache_dir(cache_cfg.get("dir", "data/.cache"), config_path)
+        persist_path = str(Path(cache_dir) / ".breaker_state.json")
+        if self._breaker_pool is None:                     # 惰性首建 = 旧"首次调用固化"
+            self._breaker_pool = create_pool(cfg, persist_path)
+        return cfg, cache_dir, persist_path, self._breaker_pool
 ```
 
-构造一次，`cache_dir` / `breaker persist path` / `vector_db_path` 一次性算好为实例属性。`review()` 内部不再各自拼接路径。
+`cache_dir` / `model_ver` / `vector_db_path` 不预算为实例属性——它们随 `config_path` 变化（旧行为：每次调用重算），由 `review()` 内部按需计算。"预缓存实例属性"是过度设计，违反应约束——本修正回退它们到 `review()` 内部。
 
-### 5.2 `review()` 拆分为 7 个私有方法
+### 5.2 `review()` 拆分为 8 个私有方法
 
 ```
+_prepare(config_path)                 → (cfg, cache_dir, persist_path, pool)  [第 0 步：加载 config + 解析路径 + 惰性建 pool]
 _read_cache(key)                       → (FinalReport|None, perf_delta_ms)
 _get_breaker(lang)                    → (breaker, breaker_state)
 _run_static(code, lang, review_cfg)   → StaticReport
@@ -106,7 +116,7 @@ _merge_and_store(...)                 → FinalReport + 写缓存 + 写向量库
 _done_perf(t_total)                   → 收尾 perf dict
 ```
 
-`review()` 主体目标 ~60 行：构造 perf → `_read_cache` → `_get_breaker` → `_run_static` → `_vector_match` → 状态机循环调 `_run_ai` / `_merge_and_store` → `_done_perf` → return。
+`review()` 主体目标 ~60 行：构造 perf → `_prepare` → `_read_cache` → `_get_breaker` → `_run_static` → `_vector_match` → 状态机循环调 `_run_ai` / `_merge_and_store` → `_done_perf` → return。
 
 ### 5.3 逐字移植纪律
 
@@ -114,35 +124,47 @@ _done_perf(t_total)                   → 收尾 perf dict
 
 ### 5.4 单例与向后兼容
 
-- `reviewer.py` 维护进程级 `_default: Reviewer | None` 与 `_get_default(config_path="") -> Reviewer`。仅当 `config_path` 非空且与默认实例 config_path 不同时新建实例——多数 CLI 调用传空，复用单例，等价于原 `_breaker_pool` 单例语义（进程内跨 `review()` 持久）。
-- `app.py` 保留：
+- `reviewer.py` 维护进程级 `_default: Reviewer | None` 与**无参** `_get_default() -> Reviewer`：
+  ```python
+  _default: Reviewer | None = None
+  def _get_default() -> Reviewer:
+      global _default
+      if _default is None:
+          _default = Reviewer()
+      return _default
+  ```
+  单例无 `config_path` 参数——`Reviewer()` 不收 config，5 参 `config_path` 经 `app.review` → `Reviewer.review` 透传，每次重载 config（同旧行为）。默认调用路径仍进程级单 pool（旧 `_breaker_pool` 单例语义）；需隔离时（测试/注入）可 `Reviewer()` 新建独立实例。
+- `app.py` 保留 5 参薄转发：
   ```python
   def review(code, lang, framework="", config_path="", use_cache=True):
-      return _get_default(config_path).review(code, lang, framework, use_cache)
+      return _get_default().review(code, lang, framework, config_path, use_cache)
   ```
 - `app.merge` 转发到 `_get_default().merge`，保留原符号。
-- `_build_prompt` / `_parse_ai` / `_risk` / `merge` 整段移植到 `reviewer.py` 作为 `Reviewer` 的实例方法（`self.merge`、`self._build_prompt` 等），与 `review()` 共享 `self.config` 等实例状态。`app.py` 通过 `_get_default().merge` / `_get_default()._build_prompt` 等转发维持原符号（仅 `app.merge` 是公开符号，需保留；其余 `_` 私有符号若被外部测试直接引用会在重构期间由 grep 发现，按需转发，否则不主动暴露）。
+- `_build_prompt` / `_parse_ai` / `_risk` / `merge` 整段移植到 `reviewer.py` 作为 `Reviewer` 的实例方法（`self.merge`、`self._build_prompt` 等）。`app.py` 通过 `_get_default().merge` / `_get_default()._build_prompt` 等转发维持原符号（仅 `app.merge` 是公开符号，需保留；其余 `_` 私有符号若被外部测试直接引用会在重构期间由 grep 发现，按需转发，否则不主动暴露）。
 
 ## 6. 错误处理与数据流（§4）
 
 ### 6.1 数据流
 
 ```
-Reviewer.__init__ (一次)
-  config ──┬─→ cache_dir / vector_db_path / breaker persist path
-           ├─→ model_ver
-           └─→ breaker_pool (create_pool)
+Reviewer.__init__ (一次，惰性、不固化 config)
+  └─→ self._breaker_pool = None
 
-review(code, lang, ...)
+review(code, lang, framework, config_path, use_cache)
   perf = {0/False 初值}  ──→ 全程同一只 dict，各步往里写
-  ├─ [use_cache] key = make_key(code,lang,model_ver)
+  cfg, cache_dir, persist_path, pool = _prepare(config_path)
+    ├─ cfg = load_config(config_path or default)   # 每次重载（逐字保留）
+    ├─ cache_dir = resolve_cache_dir(...)           # 每次重算
+    ├─ persist_path = cache_dir/.breaker_state.json
+    └─ if self._breaker_pool is None: pool = create_pool(...)  # 惰性首建（逐字保留）
+  ├─ [use_cache] key = make_key(code,lang,model_ver(cfg.models))
   │   cached = _read_cache(key); if cached → 收尾 return
-  ├─ breaker = self.breaker_pool.get(lang)
+  ├─ breaker = pool.get(lang)
   ├─ static_report = _run_static(...)
-  ├─ (vm, vtm) = _vector_match(...)
+  ├─ (vm, vtm) = _vector_match(...)  (vector_db = cache_dir/patterns.db)
   ├─ 状态机循环:
   │   AI_GATE: event = "allowed" if breaker.allow() else "blocked"
-  │   run_ai:  ai_report, ai_tier, _ = _run_ai(...); self.breaker_pool._save()  # 逐字保留
+  │   run_ai:  ai_report, ai_tier, _ = _run_ai(...); pool._save()  # 逐字保留
   │   merge_*: report = self.merge(static_report, ai_report)
   │            if router: router.write(key, report.__dict__, lang, code_lines)
   │            if not cache_hit: vstore.add_from_report(...)  # 逐字保留
@@ -154,7 +176,7 @@ review(code, lang, ...)
 
 | 位置 | 旧行为 | 新行为 |
 |---|---|---|
-| `load_config` 文件不存在 | `Path.read_text` 抛 `FileNotFoundError` 冒泡到 CLI | **保留**——`Reviewer.__init__` 不加 try |
+| `load_config` 文件不存在 | `_load_config` 抛 `FileNotFoundError` 冒泡到 CLI | **保留**——`_prepare`/`review()` 不加 try（与旧 `review()` 在 `app.py:193-196` 加载点不 catch 一致） |
 | CQRS `router.try_read` 异常 | 不显式 catch，依赖 `CQRSRouter` 内部吞 | **保留** |
 | `VectorStore` 打开/搜索失败 | 不显式 catch | **保留** |
 | `_run_ai` FallbackChain 失败 | `chain.call` 内部降级返回 tier | **保留** |
@@ -196,7 +218,7 @@ review(code, lang, ...)
 | 文件 | 测试类 | 目的 | 形态 |
 |---|---|---|---|
 | `tests/test_config.py`（新） | `TestConfigPureFunctions` | `resolve_cache_dir`/`model_ver`/`load_config`/`default_config_path` 逐字移植等价 | oracle = `fixtures/config_cache_dir.json`，纯函数 |
-| `tests/test_reviewer.py`（新） | `TestReviewerConstruction` | `Reviewer()` 默认构造不抛、`cache_dir` 解析正确、`breaker_pool` 非空、`model_ver` 对应 config | 仅测构造 |
+| `tests/test_reviewer.py`（新） | `TestReviewerConstruction` | `Reviewer()` 默认构造不抛、`_breaker_pool` 初始为 None；首次 `review()` 调用后 `_breaker_pool` 惰性建为非空（验证"惰性首建 + 首次 config 固化 pool"quirk）。不预算 cache_dir/model_ver 为实例属性。 | 仅测构造与惰性建池，不打补丁不改 config |
 | 同上 | `TestReviewForwardingParity` | `Reviewer.review()` 与 `app.review()` 相同输入/mock 下 `FinalReport.risk` 一致、`len(findings)` 一致 | 复用 `conftest` 已有 buggy/clean fixtures + mock HTTP，不打补丁 |
 
 新增测试守则：
