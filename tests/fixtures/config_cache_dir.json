@@ -1,0 +1,47 @@
+[
+  {
+    "cache_dir": "C:/tmp/mcache",
+    "config_path": "",
+    "expected": "C:\\tmp\\mcache"
+  },
+  {
+    "cache_dir": "/var/cache/dc",
+    "config_path": "",
+    "expected": "D:\\var\\cache\\dc"
+  },
+  {
+    "cache_dir": "data/.cache",
+    "config_path": "",
+    "expected": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\data\\.cache"
+  },
+  {
+    "cache_dir": "dc_cache/sub",
+    "config_path": "",
+    "expected": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\dc_cache\\sub"
+  },
+  {
+    "cache_dir": "data/.cache",
+    "config_path": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\skill\\references\\config.example.json",
+    "expected": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\data\\.cache"
+  },
+  {
+    "cache_dir": "data/.cache",
+    "config_path": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\skill\\references\\custom_config.json",
+    "expected": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\data\\.cache"
+  },
+  {
+    "cache_dir": "cc",
+    "config_path": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\skill\\references\\custom_config.json",
+    "expected": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\cc"
+  },
+  {
+    "cache_dir": "",
+    "config_path": "",
+    "expected": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\data\\.cache"
+  },
+  {
+    "cache_dir": "",
+    "config_path": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\skill\\references\\config.example.json",
+    "expected": "D:\\Code\\my_projects\\2607_jianxi\\AI_Code_Review_Dual-Check_Assist\\data\\.cache"
+  }
+]
