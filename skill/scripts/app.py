@@ -2,22 +2,17 @@
 from __future__ import annotations
 import argparse
 import json
-import re
 import sys
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from bulkhead import BulkheadExecutor
-from circuit_breaker import BreakerPool, CircuitBreaker, create_pool
-from cqrs_router import CQRSRouter, make_key
-from fallback_chain import ChainResult, FallbackChain, ModelConfig
+from circuit_breaker import BreakerPool, create_pool
 from health_check import run as health_check_run
-from state_machine import initial_state, is_terminal, next_state
-from static_check import static_check, Finding, StaticReport
+from static_check import Finding, StaticReport
 from trend_analyzer import TrendReport, analyze as trend_analyze, fmt_trend_report, fmt_trend_json
-from vector_store import PatternMatch, VectorStore
-from config import load_config, default_config_path, resolve_cache_dir, model_ver
+from vector_store import VectorStore
+from config import load_config, default_config_path, resolve_cache_dir
 
 # ── 模块级熔断器池（进程内跨 review() 调用持久） ──────────
 
