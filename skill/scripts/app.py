@@ -17,6 +17,7 @@ from state_machine import initial_state, is_terminal, next_state
 from static_check import static_check, Finding, StaticReport
 from trend_analyzer import TrendReport, analyze as trend_analyze, fmt_trend_report, fmt_trend_json
 from vector_store import PatternMatch, VectorStore
+from config import load_config, default_config_path, resolve_cache_dir, model_ver
 
 _SOURCE_DELIM = "__AI_DUAL_CHECK_SOURCE__"
 
@@ -50,32 +51,6 @@ class FinalReport:
     static_summary: str
     ai_summary: str
     findings: list[dict]
-
-
-# ── 配置解析 ────────────────────────────────────────────────
-
-
-def _load_config(path: str) -> dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
-
-
-def _default_config_path() -> str:
-    return str(Path(__file__).resolve().parents[1] / "references" / "config.example.json")
-
-
-def _resolve_cache_dir(cache_dir: str, config_path: str) -> str:
-    p = Path(cache_dir or "data/.cache")
-    if p.is_absolute():
-        return str(p)
-    cfg = Path(config_path) if config_path else None
-    default_cfg = Path(_default_config_path()).resolve()
-    is_default = cfg and cfg.exists() and cfg.resolve() == default_cfg
-    base = Path(__file__).resolve().parents[2] if is_default or not (cfg and cfg.exists()) else cfg.resolve().parent
-    return str(base / p)
-
-
-def _model_ver(models: list[dict]) -> str:
-    return json.dumps(models, sort_keys=True)[:32]
 
 
 # ── 提示词构建 / AI 解析 / 合并 ─────────────────────────────
@@ -191,14 +166,14 @@ def review(
     t_total = time.perf_counter()
 
     config = (
-        _load_config(config_path) if config_path and Path(config_path).exists()
-        else _load_config(_default_config_path())
+        load_config(config_path) if config_path and Path(config_path).exists()
+        else load_config(default_config_path())
     )
 
     # ── CQRS 缓存（读路径） ──
     cache_cfg = config.get("cache", {})
-    cache_dir = _resolve_cache_dir(cache_cfg.get("dir", "data/.cache"), config_path)
-    mver = _model_ver(config.get("models", []))
+    cache_dir = resolve_cache_dir(cache_cfg.get("dir", "data/.cache"), config_path)
+    mver = model_ver(config.get("models", []))
     key = make_key(code, lang, mver)
     router: CQRSRouter | None = None
     if use_cache:
@@ -511,8 +486,8 @@ def main() -> None:
 
     # ── 熔断器管理命令 ──
     if args.breaker_reset is not None:
-        config = _load_config(args.config) if args.config and Path(args.config).exists() else _load_config(_default_config_path())
-        cache_dir = _resolve_cache_dir(
+        config = load_config(args.config) if args.config and Path(args.config).exists() else load_config(default_config_path())
+        cache_dir = resolve_cache_dir(
             config.get("cache", {}).get("dir", "data/.cache"), args.config if args.config else ""
         )
         persist_path = str(Path(cache_dir) / ".breaker_state.json")
@@ -527,8 +502,8 @@ def main() -> None:
         return
 
     if args.breaker_status:
-        config = _load_config(args.config) if args.config and Path(args.config).exists() else _load_config(_default_config_path())
-        cache_dir = _resolve_cache_dir(
+        config = load_config(args.config) if args.config and Path(args.config).exists() else load_config(default_config_path())
+        cache_dir = resolve_cache_dir(
             config.get("cache", {}).get("dir", "data/.cache"), args.config if args.config else ""
         )
         persist_path = str(Path(cache_dir) / ".breaker_state.json")
@@ -550,7 +525,7 @@ def main() -> None:
     # ── 健康度自检 ──
     if args.health:
         sp = str(Path(__file__).resolve().parents[2] / "system" / "status.md")
-        cd = _resolve_cache_dir("data/.cache", args.config if args.config else "")
+        cd = resolve_cache_dir("data/.cache", args.config if args.config else "")
         status = health_check_run(cd, sp)
         if args.json:
             print(json.dumps(status, ensure_ascii=False, indent=2))
@@ -571,7 +546,7 @@ def main() -> None:
 
     # ── 趋势报告 ──
     if args.trend_report:
-        cache_dir = _resolve_cache_dir("data/.cache", args.config if args.config else "")
+        cache_dir = resolve_cache_dir("data/.cache", args.config if args.config else "")
         vdb = str(Path(cache_dir) / "patterns.db")
         report: TrendReport = trend_analyze(cache_dir, vdb)
         if args.json:
@@ -582,7 +557,7 @@ def main() -> None:
 
     # ── 向量记忆管理命令 ──
     if args.vector_import:
-        vdb = str(Path(_resolve_cache_dir("data/.cache", args.config if args.config else "")) / "patterns.db")
+        vdb = str(Path(resolve_cache_dir("data/.cache", args.config if args.config else "")) / "patterns.db")
         vstore = VectorStore(vdb)
         imported_count = 0
         import_path = Path(args.vector_import)
@@ -608,7 +583,7 @@ def main() -> None:
         return
 
     if args.vector_stats:
-        vdb = str(Path(_resolve_cache_dir("data/.cache", args.config if args.config else "")) / "patterns.db")
+        vdb = str(Path(resolve_cache_dir("data/.cache", args.config if args.config else "")) / "patterns.db")
         vstore = VectorStore(vdb)
         s = vstore.stats()
         if args.json:
