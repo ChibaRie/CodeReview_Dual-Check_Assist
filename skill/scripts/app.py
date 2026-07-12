@@ -45,7 +45,7 @@ class FinalReport:
     findings: list[dict]
 
 
-from reviewer import _get_default, Reviewer
+from reviewer import _get_default
 
 
 # ── 核心评审流程（转发到 Reviewer 单例） ────────────────────
