@@ -272,4 +272,5 @@ def _get_default() -> Reviewer:
     global _default
     if _default is None:
         _default = Reviewer()
+
     return _default
