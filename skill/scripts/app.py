@@ -19,19 +19,16 @@ from trend_analyzer import TrendReport, analyze as trend_analyze, fmt_trend_repo
 from vector_store import PatternMatch, VectorStore
 from config import load_config, default_config_path, resolve_cache_dir, model_ver
 
-_SOURCE_DELIM = "__AI_DUAL_CHECK_SOURCE__"
-
 # ── 模块级熔断器池（进程内跨 review() 调用持久） ──────────
-
-_breaker_pool: BreakerPool | None = None
 
 
 def _get_breaker_pool(config: dict, persist_path: str = "") -> BreakerPool:
-    """获取或初始化模块级 BreakerPool。"""
-    global _breaker_pool
-    if _breaker_pool is None:
-        _breaker_pool = create_pool(config, persist_path)
-    return _breaker_pool
+    """CLI --breaker-* 入口：确保 Reviewer 单例的 pool 已用 (config, persist_path) 初始化。
+    review() 走 _prepare 时见 _breaker_pool 非空直接复用——CLI 与 review 共享单一 pool。"""
+    rev = _get_default()
+    if rev._breaker_pool is None:
+        rev._breaker_pool = create_pool(config, persist_path)
+    return rev._breaker_pool
 
 
 # ── 数据类 ──────────────────────────────────────────────────
@@ -53,88 +50,10 @@ class FinalReport:
     findings: list[dict]
 
 
-# ── 提示词构建 / AI 解析 / 合并 ─────────────────────────────
+from reviewer import _get_default, Reviewer
 
 
-def _build_prompt(static_report: StaticReport, code: str, lang: str, framework: str) -> str:
-    findings_text = "\n".join(f"- 行 {f.line} [{f.kind}] {f.message}" for f in static_report.findings)
-    escaped = code.replace(_SOURCE_DELIM, f"{_SOURCE_DELIM}_ESCAPED")
-    source_block = f"{_SOURCE_DELIM}\n{escaped}\n{_SOURCE_DELIM}"
-    return (
-        "你是一位资深代码评审员。请基于以下静态快检结果和源代码，做语义深检。\n\n"
-        f"语言: {lang}\n框架: {framework or '无'}\n\n"
-        "静态快检发现的问题（可能包含误报）：\n" + (findings_text or "无") + "\n\n"
-        "源代码：\n" + source_block + "\n\n"
-        "请严格按以下 JSON 格式返回，不要包含任何 markdown 代码块标记：\n"
-        '{"confirmation": [{"line": 行号, "kind": "类型", "severity": "high/medium/low", "message": "确认说明"}], '
-        '"rejection": [{"line": 行号, "kind": "类型", "severity": "low", "message": "认为是误报的理由"}], '
-        '"new_findings": [{"line": 行号, "kind": "类型", "severity": "high/medium/low", "message": "AI 发现静态层漏掉的问题"}]}\n'
-    )
-
-
-def _parse_ai(text: str) -> AIReport | None:
-    m = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
-    raw = m.group(1).strip() if m else text.strip()
-    try:
-        data = json.loads(raw)
-    except Exception:
-        return None
-    if not isinstance(data, dict):
-        return None
-
-    def to_findings(xs: list[dict]) -> list[Finding]:
-        return [
-            Finding(x.get("line", 0), x.get("kind", ""), x.get("severity", "low"), x.get("message", ""))
-            for x in xs
-        ]
-
-    return AIReport(
-        confirmation=to_findings(data.get("confirmation", [])),
-        rejection=to_findings(data.get("rejection", [])),
-        new_findings=to_findings(data.get("new_findings", [])),
-    )
-
-
-def _risk(ai_report: AIReport | None, static: StaticReport) -> str:
-    high = sum(1 for f in static.findings if f.severity == "high")
-    if ai_report:
-        high += sum(1 for f in ai_report.new_findings if f.severity == "high")
-        high += sum(1 for f in ai_report.confirmation if f.severity == "high")
-    if high > 0:
-        return "阻止合并"
-    if static.findings or (ai_report and (ai_report.confirmation or ai_report.new_findings)):
-        return "修复后合并"
-    return "可合并"
-
-
-def merge(static_report: StaticReport, ai_report: AIReport | None) -> FinalReport:
-    rows: list[dict] = [
-        {"line": f.line, "layer": "static", "kind": f.kind, "severity": f.severity, "message": f.message}
-        for f in static_report.findings
-    ]
-    if ai_report:
-        rows = rows + [
-            {"line": f.line, "layer": "ai_confirmed", "kind": f.kind, "severity": f.severity, "message": f.message}
-            for f in ai_report.confirmation
-        ]
-        rows = rows + [
-            {"line": f.line, "layer": "ai_new", "kind": f.kind, "severity": f.severity, "message": f.message}
-            for f in ai_report.new_findings
-        ]
-        ai_summary = (
-            f"AI 确认 {len(ai_report.confirmation)} 条，新发现 {len(ai_report.new_findings)} 条，"
-            f"否定 {len(ai_report.rejection)} 条"
-        )
-    else:
-        ai_summary = "AI 深检未运行（熔断降级或模型链全部失败）"
-    risk = _risk(ai_report, static_report)
-    summary = f"风险等级: {risk}; 静态问题 {len(static_report.findings)} 条"
-    if ai_report:
-        summary += f"; AI 新发现 {len(ai_report.new_findings)} 条"
-    return FinalReport(risk=risk, summary=summary, static_summary=static_report.summary, ai_summary=ai_summary, findings=rows)
-
-
-# ── 核心评审流程 ────────────────────────────────────────────
+# ── 核心评审流程（转发到 Reviewer 单例） ────────────────────
 
 
 def review(
@@ -144,125 +63,11 @@ def review(
     config_path: str = "",
     use_cache: bool = True,
 ) -> tuple[FinalReport, dict]:
-    """执行双检评审，返回 (报告, 性能指标)。
+    return _get_default().review(code, lang, framework, config_path, use_cache)
 
-    性能指标包含：
-      - cache_hit: bool         是否命中缓存
-      - elapsed_ms: float       总耗时（毫秒）
-      - cache_lookup_ms: float  缓存查询耗时（毫秒）
-      - ai_tier: str            AI 链路（deepseek/qwen/local_fallback/none）
-      - breaker_state: str      当前语言的熔断器状态
-    """
-    perf: dict = {
-        "cache_hit": False,
-        "elapsed_ms": 0.0,
-        "cache_lookup_ms": 0.0,
-        "ai_tier": "none",
-        "breaker_state": "CLOSED",
-        "vector_matches": 0,
-        "vector_top_match": None,
-        "vector_stored": 0,
-    }
-    t_total = time.perf_counter()
 
-    config = (
-        load_config(config_path) if config_path and Path(config_path).exists()
-        else load_config(default_config_path())
-    )
-
-    # ── CQRS 缓存（读路径） ──
-    cache_cfg = config.get("cache", {})
-    cache_dir = resolve_cache_dir(cache_cfg.get("dir", "data/.cache"), config_path)
-    mver = model_ver(config.get("models", []))
-    key = make_key(code, lang, mver)
-    router: CQRSRouter | None = None
-    if use_cache:
-        router = CQRSRouter(cache_dir, cache_cfg.get("ttl_days", 7))
-        t_cache = time.perf_counter()
-        cached = router.try_read(key)
-        perf["cache_lookup_ms"] = (time.perf_counter() - t_cache) * 1000
-        if cached:
-            perf["cache_hit"] = True
-            perf["elapsed_ms"] = (time.perf_counter() - t_total) * 1000
-            return FinalReport(**cached), perf
-
-    # ── 获取 per-language 熔断器（始终持久化，不受 --no-cache 影响） ──
-    persist_path = str(Path(cache_dir) / ".breaker_state.json")
-    pool = _get_breaker_pool(config, persist_path)
-    lang_breaker = pool.get(lang)
-    perf["breaker_state"] = lang_breaker.state
-
-    # ── 静态快检 ──
-    review_cfg = config.get("review", {})
-    static_report = static_check(
-        code, lang,
-        max_function_lines=review_cfg.get("max_function_lines", 50),
-        max_nesting=review_cfg.get("max_nesting", 4),
-        max_line_length=review_cfg.get("max_line_length", 120),
-    )
-
-    # ── 向量记忆：搜索历史相似 Bug 模式（独立于缓存，始终启用） ──
-    vector_db = str(Path(cache_dir) / "patterns.db")
-    vstore: VectorStore | None = VectorStore(vector_db)
-    # 对每个静态 finding 搜索历史相似模式
-    for sf in static_report.findings:
-        snippet = "\n".join(code.splitlines()[max(0, sf.line - 2): sf.line + 1])
-        matches = vstore.search(kind=sf.kind, snippet=snippet, threshold=0.55, limit=1)
-        if matches:
-            perf["vector_matches"] += 1
-            if perf["vector_top_match"] is None or matches[0].combined_sim > (
-                perf["vector_top_match"].get("similarity", 0) if perf["vector_top_match"] else 0
-            ):
-                m = matches[0]
-                perf["vector_top_match"] = {
-                    "kind": m.pattern.kind,
-                    "message": m.pattern.message,
-                    "fix_hint": m.pattern.fix_hint,
-                    "similarity": round(m.combined_sim, 2),
-                    "source_file": m.pattern.source_file,
-                    "days_ago": round((time.time() - m.pattern.created_at) / 86400, 1),
-                }
-
-    # ── 状态机 + AI 降级链 ──
-    state = initial_state()
-    ai_report: AIReport | None = None
-    while not is_terminal(state):
-        state, action = next_state(state, "")
-        if action == "run_static":
-            continue
-        if action == "check_gate":
-            event = "allowed" if lang_breaker.allow() else "blocked"
-            state, action = next_state(state, event)
-        if action == "run_ai":
-            prompt = _build_prompt(static_report, code, lang, framework)
-            chain = FallbackChain(
-                [ModelConfig(**m) for m in config.get("models", [])], lang_breaker
-            )
-            chain_result: ChainResult = chain.call(prompt, static_report)
-            perf["ai_tier"] = chain_result.tier
-            perf["breaker_state"] = lang_breaker.state  # 更新（可能因调用而改变）
-            pool._save()  # 持久化熔断器状态
-            ai_report = _parse_ai(chain_result.text)
-        if action in ("merge_normal", "merge_degraded"):
-            report = merge(static_report, ai_report)
-            if router:
-                code_lines = code.count("\n") + 1
-                router.write(key, report.__dict__, lang=lang, code_lines=code_lines)
-            # ── 向量记忆：存储新 findings 到模式库 ──
-            if not perf["cache_hit"]:
-                source_file = getattr(static_report, 'source_file', '') or ''
-                imported = vstore.add_from_report(report.__dict__, code, lang, source_file)
-                if imported > 0:
-                    perf["vector_stored"] = imported
-            if vstore:
-                vstore.close()
-            perf["elapsed_ms"] = (time.perf_counter() - t_total) * 1000
-            return report, perf
-
-    perf["elapsed_ms"] = (time.perf_counter() - t_total) * 1000
-    if vstore:
-        vstore.close()
-    return merge(static_report, None), perf
+def merge(static_report: StaticReport, ai_report: AIReport | None) -> FinalReport:
+    return _get_default().merge(static_report, ai_report)
 
 
 # ── 格式化输出 ──────────────────────────────────────────────

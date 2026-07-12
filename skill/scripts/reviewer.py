@@ -5,7 +5,6 @@ import re
 import time
 from pathlib import Path
 
-from app import AIReport, FinalReport
 from circuit_breaker import BreakerPool, create_pool
 from config import default_config_path, load_config, model_ver, resolve_cache_dir
 from cqrs_router import CQRSRouter, make_key
@@ -49,6 +48,7 @@ class Reviewer:
         )
 
     def _parse_ai(self, text: str) -> AIReport | None:
+        from app import AIReport
         m = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
         raw = m.group(1).strip() if m else text.strip()
         try:
@@ -82,6 +82,7 @@ class Reviewer:
         return "可合并"
 
     def merge(self, static_report: StaticReport, ai_report: AIReport | None) -> FinalReport:
+        from app import FinalReport
         rows: list[dict] = [
             {"line": f.line, "layer": "static", "kind": f.kind, "severity": f.severity, "message": f.message}
             for f in static_report.findings
@@ -111,6 +112,7 @@ class Reviewer:
                     ) -> tuple[FinalReport | None, float, CQRSRouter | None]:
         """逐字移植 app.py:204-212。返回 (命中报告|None, cache_lookup_ms, router)。
         router 传出供未命中路径复用（保持旧单一 router 语义）。"""
+        from app import FinalReport
         router: CQRSRouter | None = None
         lookup_ms = 0.0
         if use_cache:
