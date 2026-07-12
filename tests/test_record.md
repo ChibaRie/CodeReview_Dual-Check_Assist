@@ -173,3 +173,48 @@ v0.9.2 两大合并：(1) pytest 测试套件 156 tests + mock，(2) Go 3 专有
 | Java | 7 专有 | 7 专有 |
 | Go | 0（仅 2 通用） | 3 专有 |
 | JavaScript | 0（仅 2 通用） | 4 专有 |
+
+## v0.10.0 迭代（2026-07-12）— 代码质量重构回归
+
+### pytest 全量
+
+- 验证对象：168 tests / 10 modules（156 基线 + 12 新增）
+- 命令：`cd tests && python -m pytest -q`
+- 实际：168 passed in 1.51s
+- 模块覆盖（新增）：`test_config.py`(9), `test_reviewer.py`(3)
+
+### 样本 17: config.resolve_cache_dir 逐字移植等价（test_config.py · 9 用例）
+
+- 验证对象：`config.py::resolve_cache_dir` 与重构前 `app._resolve_cache_dir` 的快照 oracle 逐位一致
+- oracle：`tests/fixtures/config_cache_dir.json`（9 组 cache_dir×config_path 输入→输出，由重构前旧实现运行生成）
+- 参数化：`test_resolve_cache_dir_matches_snapshot[cd=...,cp=...]` × 9
+- 覆盖：绝对路径（2）、相对 + 空/默认 config（4）、相对 + 自定义 config（2）、空 cache_dir（1）
+- 实际：9/9 match，含 `is_default` 反推分支 + `cfg.exists()` 文件系统 quirk 逐位一致
+- 结论：通过（零位漂移，逐字移植纪律达成）
+
+### 样本 18: Reviewer 惰性建池（test_reviewer.py · TestReviewerConstruction）
+
+- 验证对象：`Reviewer.__init__` 惰性（不预建 pool）+ `_prepare` 首个调用建池 quirk
+- `test_init_no_breaker_pool`: `Reviewer()._breaker_pool is None` → assert passed
+- `test_prepare_lazy_builds_pool`: `Reviewer()._prepare("")` 后 `_breaker_pool is not None` → assert passed
+- 结论：通过（复刻旧模块级 `_breaker_pool` quirk — 首次请求的 config 固化 pool）
+
+### 样本 19: app.review ↔ Reviewer.review forwarding parity（test_reviewer.py · TestReviewForwardingParity）
+
+- 验证对象：`app.review` 薄转发 → `Reviewer.review` 链路无退化
+- 方法：inline-mock `urllib.request.urlopen`（T1 成功空 results）→ `app.review(...)` vs `Reviewer().review(...)` 同输入
+- 比对：`r_app.risk == r_rev.risk` + `len(r_app.findings) == len(r_rev.findings)` → 两者一致
+- 结论：通过（5 参透传、单例转发链路无退化）
+
+### 重构回归清单
+
+| 验证项 | 方法 | 结果 |
+|--------|------|------|
+| 156 基线测试不变 | `cd tests && python -m pytest -q`（8 个原有模块） | 156 passed |
+| 新增 12 单测全绿 | `test_config.py`(9) + `test_reviewer.py`(3) | 12 passed |
+| CLI 端到端冒烟 | `python skill/scripts/app.py --smoke` | `app smoke PASS` |
+| 熔断器管理 | `python skill/scripts/app.py --breaker-status` | 正常（无 NameError/ImportError） |
+| 健康度自检 | `python skill/scripts/app.py --health` | 正常 |
+| 逐字移植零位漂移 | `resolve_cache_dir` 9/9 快照 match | 通过 |
+| 无新 try/except | grep `except` on reviewer.py/config.py 新代码 | 0 新增 |
+| 无 stale import | grep 已删符号于 app.py | 0 残留 |
