@@ -2,7 +2,7 @@
   <h1 align="center">🔍 AI 代码评审「双检」助手</h1>
   <p align="center"><i>DualCheck Code — 让独立开发者拥有稳定可靠的自动化 Code Review</i></p>
   <p align="center">
-    <img src="https://img.shields.io/badge/version-v0.9.2-blue" alt="version">
+    <img src="https://img.shields.io/badge/version-v0.10.0-blue" alt="version">
     <img src="https://img.shields.io/badge/python-3.10+-green" alt="python">
     <img src="https://img.shields.io/badge/languages-python(7)_|_java(6)_|_go(3)_|_javascript(4)-orange" alt="languages">
   </p>
@@ -281,7 +281,7 @@ Bug 密度（每千行）：
 
 ---
 
-### v0.9.2 — 测试套件 + Go/JS 规则 + 全语言覆盖 ← 当前
+### v0.9.2 — 测试套件 + Go/JS 规则 + 全语言覆盖
 
 > **😫 痛点**：Exp8 校园管理系统 7 个 Java 文件，系统全部返回 **0 findings**。人工审查却发现 **8 个真实问题**（3 CRITICAL + 1 HIGH + 4 MEDIUM）：SQL 注入、明文密码、资源泄漏全部漏检。
 
@@ -376,6 +376,22 @@ Bug 密度（每千行）：
 | **Go** | 正则模式匹配 | 3 条（unchecked_error, defer_in_loop, ...） | 2 条 | ✅ 可用 |
 | **JavaScript** | 正则模式匹配 | 4 条（var_usage, eqeqeq, debug_log, ...） | 2 条 | ✅ 可用 |
 
+### v0.10.0 — 代码质量重构：review() 拆分 + config 模块提取 ← 当前
+
+> **😫 痛点**：`app.py::review()` ~125 行承担配置加载/缓存/熔断/静态/向量/AI/合并/写入全部职责；配置路径硬编码、模块级 global 单例。代码质量与其"评审代码"定位形成讽刺。
+
+| 指标 | 改前 | 改后 |
+|------|------|------|
+| `review()` 函数体长度 | **125 行**（超限 2.5 倍） | **~50 行** + 8 个私有方法各 <25 行 |
+| 配置路径硬编码点 | **2 处**（`_default_config_path`, `_resolve_cache_dir` 反推 base） | **0 处**（全部在 `config.py` 4 纯函数内） |
+| 模块级 global | **1 处**（`_breaker_pool` 单例） | **0 处**（`Reviewer` 实例属性） |
+
+> **根因**：单文件 `app.py` 同时承担 CLI、编排、配置、格式化四职，无模块边界；`review()` 把"配置存活期"与"评审流程"耦合。
+>
+> **方案**：提取 `config.py`（4 纯函数，逐字移植）；引入 `reviewer.py` `Reviewer` 服务，`review()` 8 步拆分（`_prepare` 第 0 步封装 config 加载）；`app.review`/`app.merge` 薄转发；CLI 与 review 共享单一 pool 单例。Oracle 快照切断自证循环。
+
+> **实测**：168/168 pytest 全部通过（含 12 新增：`test_config.py` 9 用例 + `test_reviewer.py` 2 构造 + 1 parity）。`app.py --smoke` PASS，`--breaker-status` 正常。零新 `try/except`，逐字移植纪律达成。
+
 ---
 
 ### 迭代合规总览
@@ -389,6 +405,7 @@ Bug 密度（每千行）：
 | v0.7 质量趋势报告 | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
 | v0.8 Java 规则 | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
 | v0.9.2 测试 + Go/JS | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
+| v0.10.0 代码质量重构 | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
 
 > 违反 5 步迭代法的迭代视为未完成。详见 [`iteration/iteration_log.md`](iteration/iteration_log.md)。
 

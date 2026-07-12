@@ -437,3 +437,32 @@ status: active
   - 缓存：7 条新缓存记录写入 `data/.cache/`
   - 熔断器持久化：Java breaker OPEN，其余 CLOSED
   - 测试记录：参见 `tests/test_record.md` → 样本 13
+
+---
+
+## 迭代 8（v0.10.0）— 代码质量重构：review() 拆分 + config 模块提取
+
+**日期**：2026-07-12
+
+### 痛点
+`app.py::review()` ~125 行承担配置加载/缓存/熔断/静态/向量/AI/合并/写入全部职责；`_default_config_path` 硬编码；`_resolve_cache_dir` 反推 base 绕；模块级 `_breaker_pool` 单例 + global。代码质量与其"评审代码"定位形成讽刺，阻碍第 9 轮静态深度提升。
+
+### 量化
+- `review()` 函数体 125 行（>50 行上限 2.5 倍）
+- 配置路径硬编码点 2 处（`_default_config_path`、`_resolve_cache_dir` 内 base 反推）
+- 模块级 global 1 处（`_breaker_pool`）
+
+### 根因
+单文件 `app.py` 同时承担 CLI、编排、配置、格式化四职，无模块边界；review() 把"配置存活期"与"评审流程"耦合。
+
+### 方案
+- 提取 `config.py`（4 纯函数，逐字移植，零行为变更）
+- 引入 `reviewer.py` `Reviewer` 服务：惰性建池、`review()` 8 步拆分（`_prepare` 第 0 步封装 config 加载）
+- `app.review`/`app.merge` 薄转发；`_get_breaker_pool` 改操作 `Reviewer._breaker_pool`，CLI 与 review 共享单一 pool 单例
+- Oracle 陷阱修正：重构前用旧 `app._resolve_cache_dir` 生成快照 JSON 作移植等价 oracle，切断自证循环
+
+### 度量
+- 现有 156 测试 100% 绿（前置门达成）
+- 新增 `test_config.py`（9 用例）+ `test_reviewer.py`（2 构造 + 1 parity）
+- `review()` 主体 ~50 行 + 8 个单一职责私有方法各 <25 行
+- 零新 `try/except`，逐字移植纪律达成
