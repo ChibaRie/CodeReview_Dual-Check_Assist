@@ -24,37 +24,45 @@
 
 ## 2. 总体架构
 
-新增 `web/` 目录作为 React + Vite 前端工程，后端新增 `skill/scripts/web_server.py` 作为 FastAPI HTTP 入口。
+新增 `web/` 目录作为 React + Vite 前端工程，后端新增 `web_server.py` 作为 FastAPI HTTP 入口。
+
+> **重要：`skill/` 目录是独立维护的 Claude Code skill 包，需要随每次蒸馏同步更新。前端可视化工程和后端 Web 服务不属于 skill 包，必须放在项目根目录，避免污染 `skill/`。**
 
 ```text
 AI_Code_Review_Dual-Check_Assist/
-├── skill/
-│   ├── scripts/
-│   │   ├── app.py                 # 现有 CLI（保持兼容）
-│   │   ├── reviewer.py            # 现有 Reviewer 服务（复用）
-│   │   ├── fallback_chain.py      # 修改：接受 api_key 参数
-│   │   └── web_server.py          # 新增：FastAPI HTTP API
-│   └── references/
-│       └── config.example.json    # 现有配置
-├── web/                           # 新增：React + Vite 前端
+├── skill/                          # 独立 skill 包（保持纯净）
+│   ├── SKILL.md                    # skill 定义文件
+│   ├── scripts/                    # 12 个核心 Python 脚本
+│   │   ├── app.py                  # 现有 CLI（保持兼容）
+│   │   ├── reviewer.py             # 现有 Reviewer 服务（复用）
+│   │   ├── fallback_chain.py       # 修改：接受 api_key 参数
+│   │   └── ...                     # 其他核心脚本
+│   └── references/                 # 配置与规则
+│       ├── config.example.json
+│       └── rules/
+├── web/                            # 新增：React + Vite 前端工程
 │   ├── package.json
 │   ├── vite.config.ts
 │   ├── index.html
 │   └── src/
 │       ├── main.tsx
 │       ├── App.tsx
-│       ├── api.ts                 # 封装 /api/* 调用
-│       ├── components/            # 通用组件
+│       ├── api.ts                  # 封装 /api/* 调用
+│       ├── components/             # 通用组件
 │       └── pages/
-│           ├── ReviewPage.tsx     # 单文件评审
-│           ├── BatchPage.tsx      # 批量评审
-│           └── DashboardPage.tsx  # 仪表盘
-├── package.json                   # 新增：根目录 npm scripts
-└── data/.cache/                   # 现有缓存目录（前后端共用）
+│           ├── ReviewPage.tsx      # 单文件评审
+│           ├── BatchPage.tsx       # 批量评审
+│           └── DashboardPage.tsx   # 仪表盘
+├── web_server.py                   # 新增：FastAPI HTTP API（项目根目录）
+├── package.json                    # 新增：根目录 npm scripts
+└── data/.cache/                    # 现有缓存目录（前后端共用）
 ```
+
+`web_server.py` 运行时导入 `skill.scripts.reviewer` 等模块（当前系统运行时本就依赖这些脚本），但 `web_server.py` 本身不属于 skill 包，不随 skill 分发。
 
 **运行方式**：
 - `npm run dev`：通过 `concurrently` 同时启动 Vite 开发服务器（5173）和 FastAPI（8000）。
+- FastAPI 由 `python web_server.py` 启动。
 - Vite 配置 `proxy`，将 `/api/*` 转发到 `http://127.0.0.1:8000`。
 - 前端所有请求均使用相对路径 `/api/...`。
 
@@ -265,7 +273,7 @@ AI_Code_Review_Dual-Check_Assist/
 ## 9. 实现顺序
 
 1. 改造 `fallback_chain.py` 与 `reviewer.py`，支持 `api_key` 参数。
-2. 新增 `skill/scripts/web_server.py`，暴露 FastAPI API。
+2. 新增项目根目录 `web_server.py`，暴露 FastAPI API。
 3. 新增 `web/` 前端工程，完成 `ReviewPage`。
 4. 实现 `BatchPage`。
 5. 实现 `DashboardPage`。
