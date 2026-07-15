@@ -23,7 +23,9 @@ Thumbs.db
 # Claude Code
 .claude/
 
-# 前端 (web/)
+# Node (root + web/)
+node_modules/
 web/node_modules/
 web/dist/
 web/.vite/
+package-lock.json
