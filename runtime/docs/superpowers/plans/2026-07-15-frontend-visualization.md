@@ -1767,7 +1767,7 @@ npm run dev
 
 ## 执行方式
 
-**Plan complete and saved to `docs/superpowers/plans/2026-07-15-frontend-visualization.md`.**
+**Plan complete and saved to `runtime/docs/superpowers/plans/2026-07-15-frontend-visualization.md`.**
 
 **Two execution options:**
 

@@ -543,6 +543,8 @@ AI_Code_Review_Dual-Check_Assist/
 │           └── DashboardPage.tsx   #   系统仪表盘
 ├── web_server.py                   # 🌐 FastAPI 后端入口（v1.0 新增，不属于 skill）
 ├── package.json                    # 📦 根目录 npm scripts（concurrently）
+├── web_server.py                   # 🌐 FastAPI 后端入口（v1.0 新增，不属于 skill）
+├── package.json                    # 📦 根目录 npm scripts（concurrently）
 ├── data/                           # 🧪 测试样本数据（15 文件）
 │   ├── sample_buggy_code.py        #   Python 有缺陷样本
 │   ├── sample_clean_code.py        #   Python 干净样本（对照组）
@@ -555,19 +557,21 @@ AI_Code_Review_Dual-Check_Assist/
 │   └── test_record.md              #   按版本分组的回归测试基线
 ├── iteration/                      # 📝 迭代升级说明
 │   └── iteration_log.md            #   版本迁移日志 + 5 步迭代法记录
+├── system/                         # 📊 系统状态（自动生成）
+│   └── status.md                   #   自动生成的状态仪表盘
 ├── runtime/                        # 📦 运行时产物（Skill 部署参考）
 │   ├── AGENTS.md                   #   AI 执行规则（渐进式披露 + 意图识别）
 │   ├── SYSTEM_SPEC.md              #   系统说明书（数据契约 + 架构设计）
-│   ├── system/                     #   系统配置与日志
+│   ├── system/                     #   系统配置模板（部署参考）
 │   │   ├── review-rules.json       #   评审规则注册表 + 语言定义
-│   │   ├── status.md               #   自动生成的状态仪表盘
+│   │   ├── status.md               #   状态仪表盘模板
 │   │   ├── logs/                   #   日常操作日志
 │   │   ├── update-logs/            #   系统功能更新日志
 │   │   └── reports/                #   健康度自检报告
 │   ├── distill/                    #   Bug 模式蒸馏卡片
 │   │   └── patterns/python/        #   语言特定可复用模式
 │   └── docs/                       #   设计文档
-│       └── superpowers/            #   实现计划 + 设计规约
+│       └── superpowers/            #   实现计划 + 设计规约（6 文档）
 └── README.md                       # 📖 本文件
 ```
 
