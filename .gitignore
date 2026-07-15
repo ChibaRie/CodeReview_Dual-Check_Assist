@@ -22,3 +22,8 @@ Thumbs.db
 
 # Claude Code
 .claude/
+
+# 前端 (web/)
+web/node_modules/
+web/dist/
+web/.vite/
