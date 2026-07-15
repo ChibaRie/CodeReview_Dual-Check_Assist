@@ -1,11 +1,10 @@
 # System Status
 
-- Generated: 2026-07-15T20:46:13.016060+08:00
 - Version: v1.0.1
 - Cache dir: `D:\Code\my_projects\2607_jianxi\AI_Code_Review_Dual-Check_Assist\data\.cache`
 - Cache files: 28 (expired: 0)
 - Cache total size: 17.4 KB
-- CQRS 访问: 命中 64 / 共 93 次 (命中率 69%)
+- CQRS 访问: 命中 78 / 共 107 次 (命中率 73%)
 - 熔断器: 5 个语言，0 个 OPEN
 - Rule files: go.yaml, java.yaml, javascript.yaml, python.yaml, universal.yaml
 - Web UI: React + Vite (`npm run dev` → http://localhost:5173)
