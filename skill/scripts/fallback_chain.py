@@ -44,8 +44,8 @@ class FallbackChain:
 
     # ── Tier 1 & Tier 2: 远程模型调用 ─────────────────────
 
-    def _call_one(self, model: ModelConfig, prompt: str) -> str:
-        key = os.environ.get(model.api_key_env, "")
+    def _call_one(self, model: ModelConfig, prompt: str, api_key: str = "") -> str:
+        key = api_key or os.environ.get(model.api_key_env, "")
         if not key:
             raise RuntimeError(f"缺少环境变量 {model.api_key_env}")
         payload = json.dumps(
@@ -87,10 +87,13 @@ class FallbackChain:
 
     # ── 三级降级调用 ──────────────────────────────────────
 
-    def call(self, prompt: str, static_report: StaticReport) -> ChainResult:
+    def call(self, prompt: str, static_report: StaticReport, api_key: str = "") -> ChainResult:
         """按 T1→T2→T3 顺序尝试，返回 ChainResult。
 
         熔断器 OPEN 时直接跳到 Tier 3（本地兜底）。
+
+        若 ``api_key`` 非空，则优先用它作为所有远程模型的 Bearer key，
+        否则回退到各 ``ModelConfig.api_key_env`` 指向的环境变量（保持向后兼容）。
         """
         attempts: list[dict] = []
 
@@ -108,7 +111,7 @@ class FallbackChain:
         for i, model in enumerate(self.models):
             tier_label = tier_names.get(i, model.name)
             try:
-                text = self._call_one(model, prompt)
+                text = self._call_one(model, prompt, api_key)
                 self.breaker.record_success()
                 attempts.append({"model": model.name, "tier": tier_label, "success": True})
                 return ChainResult(text=text, tier=tier_label, attempts=attempts)
