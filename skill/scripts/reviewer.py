@@ -166,14 +166,15 @@ class Reviewer:
         return vector_matches, vector_top_match, vstore
 
     def _run_ai(self, lang_breaker, static_report: StaticReport, code: str, lang: str,
-                framework: str, config: dict, pool: BreakerPool
+                framework: str, config: dict, pool: BreakerPool, api_key: str = ""
                 ) -> tuple[AIReport | None, str, str]:
-        """逐字移植 app.py:262-270。返回 (ai_report, ai_tier, new_breaker_state)。"""
+        """逐字移植 app.py:262-270。返回 (ai_report, ai_tier, new_breaker_state)。
+        api_key: 前端传入的显式 key，空串回退到环境变量（向后兼容）。"""
         prompt = self._build_prompt(static_report, code, lang, framework)
         chain = FallbackChain(
             [ModelConfig(**m) for m in config.get("models", [])], lang_breaker
         )
-        chain_result: ChainResult = chain.call(prompt, static_report)
+        chain_result: ChainResult = chain.call(prompt, static_report, api_key=api_key)
         ai_tier = chain_result.tier
         new_state = lang_breaker.state
         pool._save()  # 逐字保留私有直调（本轮不清理）
@@ -203,7 +204,7 @@ class Reviewer:
         return perf
 
     def review(self, code: str, lang: str, framework: str = "",
-               config_path: str = "", use_cache: bool = True
+               config_path: str = "", use_cache: bool = True, api_key: str = ""
                ) -> tuple[FinalReport, dict]:
         perf: dict = {
             "cache_hit": False,
@@ -249,7 +250,7 @@ class Reviewer:
                 state, action = next_state(state, event)
             if action == "run_ai":
                 ai_report, ai_tier, new_state = self._run_ai(
-                    lang_breaker, static_report, code, lang, framework, config, pool
+                    lang_breaker, static_report, code, lang, framework, config, pool, api_key
                 )
                 perf["ai_tier"] = ai_tier
                 perf["breaker_state"] = new_state
