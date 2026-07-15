@@ -21,8 +21,8 @@ export default function DashboardPage() {
       setBreakerData(b)
       setVectorData(v)
       setTrendData(t)
-    } catch (err: any) {
-      setError(err.message || '加载仪表盘失败')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '加载仪表盘失败')
     }
   }
 
@@ -31,8 +31,12 @@ export default function DashboardPage() {
   }, [])
 
   const handleReset = async (lang: string) => {
-    await resetBreaker(lang)
-    await load()
+    try {
+      await resetBreaker(lang)
+      await load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '重置熔断器失败')
+    }
   }
 
   return (
