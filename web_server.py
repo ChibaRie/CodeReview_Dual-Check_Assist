@@ -6,7 +6,14 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from pathlib import Path
+
+# skill/scripts 内部使用裸导入（from circuit_breaker import …），
+# 需将该目录加入 sys.path 才能作为包外入口运行 web_server。
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent / "skill" / "scripts")
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
