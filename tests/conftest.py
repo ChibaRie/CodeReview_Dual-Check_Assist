@@ -10,7 +10,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# 确保 skill/scripts 在 sys.path 中
+# 确保项目根目录与 skill/scripts 在 sys.path 中
+_PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 _SCRIPTS = str(Path(__file__).resolve().parents[1] / "skill" / "scripts")
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)

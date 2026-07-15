@@ -31,6 +31,8 @@ app.add_middleware(
 
 logger = logging.getLogger(__name__)
 
+PROJECT_ROOT = Path(__file__).resolve().parent
+
 LANG_MAP: dict[str, str] = {
     ".py": "python",
     ".go": "go",
@@ -61,10 +63,6 @@ class BreakerResetRequest(BaseModel):
     lang: str = Field(default="", pattern=r"^(python|java|go|javascript)?$")
 
 
-class BatchFileError:
-    message = "文件评审失败"
-
-
 _cache_dir_value: str | None = None
 
 
@@ -86,13 +84,18 @@ def _load_breaker_pool() -> BreakerPool:
 
 
 def _safe_directory(directory: str) -> Path:
-    """解析并校验 batch 目录，拒绝明显的路径遍历序列。"""
-    if ".." in directory or "~" in directory:
-        raise ValueError("目录路径包含非法字符")
+    """解析并校验 batch 目录，确保其位于项目根目录内。"""
     p = Path(directory)
-    if not p.is_dir():
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+    resolved = p.resolve()
+    try:
+        resolved.relative_to(PROJECT_ROOT)
+    except ValueError as exc:
+        raise ValueError("目录路径超出允许范围") from exc
+    if not resolved.is_dir():
         raise ValueError(f"{directory} 不是有效目录")
-    return p
+    return resolved
 
 
 @app.post("/api/review")
@@ -121,7 +124,7 @@ def api_batch(req: BatchRequest) -> dict:
     try:
         directory = _safe_directory(req.directory)
     except ValueError as exc:
-        return {"error": str(exc)}
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     files = sorted(
         [f for f in directory.iterdir() if f.is_file() and f.suffix in LANG_MAP]
@@ -172,34 +175,50 @@ def api_batch(req: BatchRequest) -> dict:
 
 @app.get("/api/health")
 def api_health() -> dict:
-    cache_dir = _cache_dir()
-    status_path = str(Path(__file__).resolve().parent / "system" / "status.md")
-    return health_check_run(cache_dir, status_path)
+    try:
+        cache_dir = _cache_dir()
+        status_path = str(PROJECT_ROOT / "system" / "status.md")
+        return health_check_run(cache_dir, status_path)
+    except Exception as exc:
+        logger.exception("health check failed")
+        raise HTTPException(status_code=503, detail="健康检查失败，请稍后重试") from exc
 
 
 @app.get("/api/breaker")
 def api_breaker() -> dict:
-    pool = _load_breaker_pool()
-    return pool.status()
+    try:
+        pool = _load_breaker_pool()
+        return pool.status()
+    except Exception as exc:
+        logger.exception("breaker status failed")
+        raise HTTPException(status_code=500, detail="熔断器状态获取失败") from exc
 
 
 @app.post("/api/breaker/reset")
 def api_breaker_reset(req: BreakerResetRequest) -> dict:
-    pool = _load_breaker_pool()
-    pool.reset(req.lang)
-    pool._save()
+    try:
+        pool = _load_breaker_pool()
+        pool.reset(req.lang)
+        pool._save()
+    except Exception as exc:
+        logger.exception("breaker reset failed")
+        raise HTTPException(status_code=500, detail="熔断器重置失败") from exc
     return {"ok": True, "lang": req.lang or "all"}
 
 
 @app.get("/api/vector/stats")
 def api_vector_stats() -> dict:
-    cache_dir = _cache_dir()
-    vdb = str(Path(cache_dir) / "patterns.db")
-    vstore = VectorStore(vdb)
     try:
-        return vstore.stats()
-    finally:
-        vstore.close()
+        cache_dir = _cache_dir()
+        vdb = str(Path(cache_dir) / "patterns.db")
+        vstore = VectorStore(vdb)
+        try:
+            return vstore.stats()
+        finally:
+            vstore.close()
+    except Exception as exc:
+        logger.exception("vector stats failed")
+        raise HTTPException(status_code=500, detail="向量统计获取失败") from exc
 
 
 @app.get("/api/trend")
