@@ -8,6 +8,8 @@ venv/
 # 缓存与派生产物
 data/.cache/
 *.tmp
+.coverage
+htmlcov/
 
 # 敏感文件（防止 API 密钥泄露）
 config.json
@@ -20,3 +22,10 @@ Thumbs.db
 
 # Claude Code
 .claude/
+
+# Node (root + web/)
+node_modules/
+web/node_modules/
+web/dist/
+web/.vite/
+package-lock.json
