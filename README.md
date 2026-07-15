@@ -2,8 +2,9 @@
   <h1 align="center">🔍 AI 代码评审「双检」助手</h1>
   <p align="center"><i>DualCheck Code — 让独立开发者拥有稳定可靠的自动化 Code Review</i></p>
   <p align="center">
-    <img src="https://img.shields.io/badge/version-v0.10.0-blue" alt="version">
+    <img src="https://img.shields.io/badge/version-v1.0.1-blue" alt="version">
     <img src="https://img.shields.io/badge/python-3.10+-green" alt="python">
+    <img src="https://img.shields.io/badge/frontend-React_|_Vite_|_TypeScript-61dafb" alt="frontend">
     <img src="https://img.shields.io/badge/languages-python(7)_|_java(6)_|_go(3)_|_javascript(4)-orange" alt="languages">
   </p>
 </p>
@@ -24,8 +25,8 @@
 - **三级降级链**：T1 DeepSeek → T2 Qwen → T3 本地兜底，**永远可用**
 - **舱壁隔离**：大文件(>500行)独立线程池，不阻塞小文件响应
 - **向量记忆**：Bug 模式自动存入 sqlite，重复出现时匹配历史修复方案
-- **趋势周报**：评分趋势 + Bug 密度 + 高频类型 + 改进建议
-- **Java 专有规则**：SQL 注入 / 硬编码密码 / 资源泄漏 等 8 条规则
+- **可视化 Web UI**：React + Vite 前端，支持单文件/批量评审与系统状态仪表盘
+- **前端 API Key 输入**：DeepSeek API key 在浏览器端输入，后端 Proxy 代理调用
 
 ---
 
@@ -376,7 +377,26 @@ Bug 密度（每千行）：
 | **Go** | 正则模式匹配 | 3 条（unchecked_error, defer_in_loop, ...） | 2 条 | ✅ 可用 |
 | **JavaScript** | 正则模式匹配 | 4 条（var_usage, eqeqeq, debug_log, ...） | 2 条 | ✅ 可用 |
 
-### v0.10.0 — 代码质量重构：review() 拆分 + config 模块提取 ← 当前
+### v1.0.1 — 前端可视化 Web UI ← 当前
+
+> **😫 痛点**：用户每次都要开终端敲命令行，贴代码、输参数、读纯文本报告。独立开发者需要更直观的交互方式 — 编辑器里写代码、点按钮即评审、图表化看趋势。
+
+| 指标 | 改前 | 改后 |
+|------|------|------|
+| 使用方式 | CLI 命令行 + 环境变量 | **Web UI 编辑器 + 前端输入 API Key** |
+| 系统状态可见性 | `--health` 纯文本输出 | **可视化仪表盘** |
+| 批量评审 | `--batch` 表格式终端输出 | **Web UI 表格 + 批量汇总** |
+| 部署启动 | 多步骤手动冒烟 | **`npm run dev` 一键启动前后端** |
+
+> **根因**：系统仅有 CLI 入口，缺乏可视化交互界面。AI 代码评审的用户多为独立开发者，他们需要低门槛、即时反馈的工具。
+>
+> **方案**：新增 React + Vite 前端工程 (`web/`)，FastAPI 后端 (`web_server.py`)，暴露 7 个 `/api/*`端点。前端支持单文件评审（Monaco 编辑器 + 报告面板）、批量目录评审、系统状态仪表盘。API key 在前端输入，后端代理调用 DeepSeek，不记录不持久化。`fallback_chain.py` 与 `reviewer.py` 增加显式 `api_key` 参数透传，CLI 完全兼容。
+>
+> **实测**：218/218 pytest 全部通过。`npm run build` 构建成功（57 modules, ~193 KB JS）。`npm run dev` 一键启动 Vite :5173 + FastAPI :8000。后端新增代码覆盖率 99%。Skill 包保持独立，前端工程与 Web 服务不污染 `skill/` 目录。
+
+---
+
+### v0.10.0 — 代码质量重构：review() 拆分 + config 模块提取
 
 > **😫 痛点**：`app.py::review()` ~125 行承担配置加载/缓存/熔断/静态/向量/AI/合并/写入全部职责；配置路径硬编码、模块级 global 单例。代码质量与其"评审代码"定位形成讽刺。
 
@@ -406,12 +426,30 @@ Bug 密度（每千行）：
 | v0.8 Java 规则 | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
 | v0.9.2 测试 + Go/JS | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
 | v0.10.0 代码质量重构 | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
+| v1.0.1 前端可视化 | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ |
 
 > 违反 5 步迭代法的迭代视为未完成。详见 [`iteration/iteration_log.md`](iteration/iteration_log.md)。
 
 ---
 
 ## 使用方式
+
+### Web UI 本地启动
+
+```bash
+# 安装前端依赖
+npm install && cd web && npm install && cd ..
+# 或一键安装
+npm run install:all
+
+# 启动本地 Web UI（Vite + FastAPI 并发）
+npm run dev
+
+# 浏览器打开 http://localhost:5173
+# - 在编辑器中写代码 / 选择语言 →「评审」→ 查看报告
+# - /batch 批量评审目录
+# - /dashboard 系统健康度仪表盘
+```
 
 ### Skill 一键部署
 
@@ -479,7 +517,7 @@ AI_Code_Review_Dual-Check_Assist/
 │   │   ├── static_check.py         #   静态快检层（Python AST + Java 正则）
 │   │   ├── circuit_breaker.py      #   熔断器 + BreakerPool（按语言隔离）
 │   │   ├── cqrs_router.py          #   CQRS 缓存读写（SHA256 全量键）
-│   │   ├── fallback_chain.py       #   三级模型降级链
+│   │   ├── fallback_chain.py       #   三级模型降级链（支持 api_key 参数）
 │   │   ├── state_machine.py        #   评审流程状态机
 │   │   ├── bulkhead.py             #   舱壁隔离（双线程池）
 │   │   ├── health_check.py         #   系统健康度自检
@@ -488,6 +526,23 @@ AI_Code_Review_Dual-Check_Assist/
 │   └── references/                 #   参考配置
 │       ├── config.example.json     #   模型 / 熔断器 / 缓存配置
 │       └── rules/                  #   声明式评审规则 YAML（5 语言）
+├── web/                            # 🖥️ Web UI 前端（v1.0 新增）
+│   ├── package.json                #   前端依赖与 scripts
+│   ├── vite.config.ts              #   Vite 配置 + API proxy
+│   ├── tailwind.config.js          #   Tailwind CSS v3 配置
+│   ├── index.html                  #   HTML 入口
+│   └── src/
+│       ├── main.tsx                #   React 应用挂载
+│       ├── App.tsx                 #   路由 + Layout
+│       ├── api.ts                  #   API 封装（7 个端点）
+│       ├── index.css               #   Tailwind 指令
+│       ├── components/             #   通用 UI 组件（6 个）
+│       └── pages/                  #   三页面
+│           ├── ReviewPage.tsx      #   单文件评审
+│           ├── BatchPage.tsx       #   批量评审
+│           └── DashboardPage.tsx   #   系统仪表盘
+├── web_server.py                   # 🌐 FastAPI 后端入口（v1.0 新增，不属于 skill）
+├── package.json                    # 📦 根目录 npm scripts（concurrently）
 ├── data/                           # 🧪 测试样本数据（15 文件）
 │   ├── sample_buggy_code.py        #   Python 有缺陷样本
 │   ├── sample_clean_code.py        #   Python 干净样本（对照组）
@@ -532,9 +587,10 @@ AI_Code_Review_Dual-Check_Assist/
 ## 架构
 
 ```
-用户贴代码
-    │
-    ▼
+用户入口 ──→ Web UI (React) ──→ FastAPI ──→ Reviewer
+                                      │
+            ┌─────────────────────────┘
+            ▼
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │  静态快检     │ ──→ │  CQRS 缓存   │ ──→ │  熔断器闸门   │
 │  AST + 正则   │     │  SHA256 去重 │     │  per-lang    │

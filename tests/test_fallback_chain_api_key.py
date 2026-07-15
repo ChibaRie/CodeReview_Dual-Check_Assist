@@ -1,4 +1,4 @@
-"""fallback_chain.call 显式 api_key 参数 — TDD 单元测试。v0.10
+"""fallback_chain.call 显式 api_key 参数 — TDD 单元测试。v1.0.1
 
 Verifies that FallbackChain.call accepts an optional ``api_key`` argument
 and uses it in the Authorization header, taking precedence over any

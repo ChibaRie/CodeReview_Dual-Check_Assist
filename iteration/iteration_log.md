@@ -466,3 +466,37 @@ status: active
 - 新增 `test_config.py`（9 用例）+ `test_reviewer.py`（2 构造 + 1 parity）
 - `review()` 主体 ~50 行 + 8 个单一职责私有方法各 <25 行
 - 零新 `try/except`，逐字移植纪律达成
+
+---
+
+## 迭代 9（v1.0.1）— 前端可视化 Web UI
+
+**日期**：2026-07-15
+
+### 痛点
+用户每次都要开终端敲 `python skill/scripts/app.py <文件> --lang python`，贴代码、输参数、读纯文本报告。独立开发者需要更直观的交互方式 — 编辑器里写代码、点按钮即评审、图表化看趋势。同时 DeepSeek API key 只能写环境变量，切换/管理不便。
+
+### 量化
+- 使用方式：CLI 命令行 + 环境变量 → Web UI 编辑器 + 前端输入 API Key
+- 系统状态可见性：`--health` 纯文本输出 → 可视化仪表盘
+- 批量评审展示：`--batch` 终端表格 → Web UI 表格 + 批量汇总
+- 部署启动方式：多步骤手动冒烟 → `npm run dev` 一键启动前后端
+- 测试从 168 增加到 218，后端新代码覆盖率 99%
+
+### 根因
+系统仅有 CLI 入口，缺乏可视化交互界面。AI 代码评审的用户多为独立开发者，需要低门槛、即时反馈的工具。
+
+### 方案
+- 新增 React 18 + Vite 5 + TypeScript + Tailwind CSS 前端工程（`web/`，32 文件），含 6 个通用组件 + 3 个页面（ReviewPage/BatchPage/DashboardPage）
+- 新增 FastAPI 后端（项目根目录 `web_server.py`，245 行），暴露 `POST /api/review`、`POST /api/batch`、`GET /api/health`、`GET /api/breaker`、`POST /api/breaker/reset`、`GET /api/vector/stats`、`GET /api/trend` 共 7 个端点
+- API Key 在前端 `localStorage` 输入，后端透传到 `FallbackChain`，不记录不持久化
+- `fallback_chain.py` + `reviewer.py` 增加 `api_key` 参数，CLI 完全兼容
+- 根目录 `package.json` + `concurrently` 一键启动 Vite（:5173）和 FastAPI（:8000）
+- `skill/` 目录保持独立不受污染；`web_server.py` 不进入 `skill/`
+
+### 度量
+- 218/218 pytest 全部通过
+- `npm run build` 构建成功（57 modules, ~193 KB JS, ~10 KB CSS）
+- `npm run dev` 启动正常，前后端并发
+- 后端 `web_server.py` 覆盖率 99%（42 tests in test_web_server.py）
+- 所有设计规约和实现计划文档已同步

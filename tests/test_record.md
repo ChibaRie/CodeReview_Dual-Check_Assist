@@ -218,3 +218,63 @@ v0.9.2 两大合并：(1) pytest 测试套件 156 tests + mock，(2) Go 3 专有
 | 逐字移植零位漂移 | `resolve_cache_dir` 9/9 快照 match | 通过 |
 | 无新 try/except | grep `except` on reviewer.py/config.py 新代码 | 0 新增 |
 | 无 stale import | grep 已删符号于 app.py | 0 残留 |
+
+## v1.0.1 迭代（2026-07-15）— 前端可视化 Web UI
+
+### pytest 全量
+
+- 验证对象：218 tests / 13 modules（168 基线 + 50 新增）
+- 命令：`pytest -q`
+- 实际：218 passed in 3.41s
+- 模块覆盖（新增）：`test_fallback_chain_api_key.py`(4), `test_reviewer_api_key.py`(4), `test_web_server.py`(42)
+
+### 样本 20: `test_fallback_chain_api_key.py`（api_key 显式传参 · 4 用例）
+
+- 验证对象：`FallbackChain.call(prompt, static_report, api_key="")` 签名
+- 覆盖：显式 key 覆盖 env、无 key fallback env、无 key 无 env 走本地兜底、key 不泄露
+- 结论：通过（api_key 优先于 env，env → local_fallback 链路完整）
+
+### 样本 21: `test_reviewer_api_key.py`（Reviewer api_key 透传 · 4 用例）
+
+- 验证对象：`Reviewer.review(..., api_key="")` 签名
+- 覆盖：显式 key 透传到 FallbackChain、默认空字符串向后兼容、key 不泄露到报告、缓存命中短路
+- 结论：通过（CLI 兼容，app.review 5 参透传无退化）
+
+### 样本 22: `test_web_server.py`（FastAPI 端点 · 42 用例）
+
+- 验证对象：7 个 `/api/*` 端点
+- 覆盖：POST `/api/review`（含 api_key/use_cache 变体）、POST `/api/batch`（正常/非法目录/路径穿越/绝对路径）、GET `/api/health`、GET `/api/breaker`、POST `/api/breaker/reset`、GET `/api/vector/stats`、GET `/api/trend`、错误端点结构化 JSON、语言校验
+- 结论：通过（web_server.py 覆盖率 99%）
+
+### 前端构建验证
+
+- 验证对象：`web/` React + Vite + TypeScript 构建
+- 命令：`cd web && npm run build`
+- 实际：57 modules, ~193 KB JS / ~10 KB CSS，tsc strict 模式 0 错误
+
+### 新增文件清单
+
+| 路径 | 说明 |
+|------|------|
+| `web_server.py` | FastAPI 后端（245 行，7 端点） |
+| `web/` | React 前端工程（32 文件） |
+| `web/src/api.ts` | API 封装（7 个 fetch 封装 + 6 个接口） |
+| `web/src/components/` | 通用 UI 组件（6 个） |
+| `web/src/pages/` | 页面组件（3 个） |
+| `package.json` | 根 npm scripts（concurrently） |
+| `tests/test_fallback_chain_api_key.py` | fallback_chain api_key 测试 |
+| `tests/test_reviewer_api_key.py` | reviewer api_key 测试 |
+| `tests/test_web_server.py` | FastAPI 端点测试 |
+
+### 重构回归清单
+
+| 验证项 | 方法 | 结果 |
+|--------|------|------|
+| 168 基线测试不变 | `pytest -q`（10 个原有模块） | 168 passed |
+| 新增 50 单测全绿 | `test_fallback_chain_api_key.py`(4) + `test_reviewer_api_key.py`(4) + `test_web_server.py`(42) | 50 passed |
+| CLI 端到端冒烟 | `python skill/scripts/app.py --smoke` | `app smoke PASS` |
+| 熔断器管理 | `python skill/scripts/app.py --breaker-status` | 正常 |
+| 健康度自检 | `python skill/scripts/app.py --health` | 正常 |
+| 前端构建 | `cd web && npm run build` | 构建成功 |
+| Web UI API 端点 | `pytest tests/test_web_server.py -v` | 42 passed |
+| CLI 兼容（无退化） | `python skill/scripts/app.py data/sample_buggy_code.py --lang python --json` | 正常 |

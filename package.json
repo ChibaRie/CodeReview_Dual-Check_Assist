@@ -1,6 +1,6 @@
 {
   "name": "dualcheck-code",
-  "version": "0.11.0",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:web\" \"npm run dev:server\"",
